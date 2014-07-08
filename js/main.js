@@ -1,8 +1,8 @@
 require.config({
     paths: {
-        'three': 'libs/threejs/build/three.min'
+        'dat': 'libs/dat-gui/build/dat.gui'
+      , 'three': 'libs/threejs/build/three'
       , 'three.orbitcontrols': 'OrbitControls'
-      , 'dat': 'libs/dat-gui/build/dat.gui.min'
     }
 
   , shim: {

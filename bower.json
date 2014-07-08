@@ -21,10 +21,11 @@
     "test",
     "tests"
   ],
-  "dependencies": {
+  "devDependencies": {
     "threejs": "#fa4e4ae77fe5a1f9506a91160cc7a9f4e61518fc",
     "requirejs": "~2.1.14",
     "requirejs-domready": "~2.0.1",
-    "dat-gui": "~0.5.0"
+    "dat-gui": "~0.5.0",
+    "almond": "~0.2.9"
   }
 }

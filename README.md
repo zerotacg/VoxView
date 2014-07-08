@@ -7,7 +7,10 @@ Landmark-style voxel geometry. It is built upon several libraries:
 * [dat.GUI](https://code.google.com/p/dat-gui/) for UI widgets
 * Detector.js and Orbit Controls.js from [Three.js Examples](https://github.com/stemkoski/stemkoski.github.com) (WebGL detection and 3D manipulation controls)
 
-To install the dependencies via bower user 'bower install'.
+Bower and requirejs is used for dependency management and can be
+installed via 'npm install' if not already installed globally. After
+getting the necessary tools you can get the dependencies via bower
+'./node_modules/.bin/bower install'.
 
 ## Current Status
 

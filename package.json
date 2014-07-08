@@ -1,0 +1,31 @@
+{
+  "name": "voxview",
+  "version": "0.0.0",
+  "description": "Javascript tool for 3D visualization of Landmark-style voxel geometry",
+  "main": "voxview.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pinealservo/VoxView.git"
+  },
+  "contributors": [
+    {
+      "name": "pinealservo"
+    },
+    {
+      "name": "Tobias Peters",
+      "email": "tobias.peters@kreativeffekt.at"
+    }
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/pinealservo/VoxView/issues"
+  },
+  "homepage": "https://github.com/pinealservo/VoxView",
+  "devDependencies": {
+    "requirejs": "~2.1.14",
+    "bower": "~1.3.7"
+  }
+}
