@@ -24,7 +24,7 @@
     
     name: "libs/almond/almond",
     insertRequire: ["main"],
-    include: ["main"],
+    include: [ "domReady", "main" ],
     out: "build/voxview.min.js",
     wrap: true
 })
