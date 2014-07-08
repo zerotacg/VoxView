@@ -1,12 +1,13 @@
 require.config({
     paths: {
-        three: 'libs/threejs/build/three.min'
-      , dat: 'libs/dat.gui/dat.gui.min'
+        'three': 'libs/threejs/build/three.min'
+      , 'three.orbitcontrols': 'OrbitControls'
+      , 'dat': 'libs/dat-gui/build/dat.gui.min'
     }
 
   , shim: {
         'dat': { exports: 'dat' }
-      , 'detector': { exports: 'Detector' }
+      , 'Detector': { exports: 'Detector' }
       , 'three': { exports: 'THREE' }
       , 'three.orbitcontrols': {
             deps: [ 'three' ]

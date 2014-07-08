@@ -1,7 +1,12 @@
 define(function(require){
-  var Detector  = require( 'Detector' )
-    , THREE     = require( 'three' )
-    , VoxView   = require( '../VoxView' )
+  var Detector      = require( 'Detector' )
+    , THREE         = require( 'three' )
+    , OrbitControls = require( 'three.orbitcontrols' )
+    , VoxView       = require( '../VoxView' )
+    , TooltipSprite = require( './TooltipSprite' )
+    , UnitVoxel     = require( './UnitVoxel' )
+    , VoxelGrid3D   = require( './VoxelGrid3D' )
+    , VoxelObject3D = require( './VoxelObject3D' )
     ;
 
   //
@@ -62,13 +67,13 @@ define(function(require){
     //
 
     // Visible Geometry
-    var model = new VoxView.UnitVoxel({corners: params.cornerLocs});
-    var vox = new VoxView.VoxelObject3D(model);
+    var model = new UnitVoxel({corners: params.cornerLocs});
+    var vox = new VoxelObject3D(model);
 
     scene.add(vox);
 
     // Voxel Grid Geometry
-    var gridobj = new VoxView.VoxelGrid3D();
+    var gridobj = new VoxelGrid3D();
 
     scene.add(gridobj);
 
@@ -76,7 +81,7 @@ define(function(require){
     // Controls
     //
     var controls = new THREE.OrbitControls(camera, renderer.domElement);
-    var tooltipSprite = new VoxView.TooltipSprite();
+    var tooltipSprite = new TooltipSprite();
     var projector = new THREE.Projector();
     var mouse = { x: 0, y: 0};
 
