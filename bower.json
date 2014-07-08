@@ -23,7 +23,9 @@
   ],
   "dependencies": {
     "threejs": "#fa4e4ae77fe5a1f9506a91160cc7a9f4e61518fc",
-    "dat.gui": "6863419d225506c822d87b01c35706133002c40d",
-    "requirejs": "~2.1.14"
+    "dat.gui": "#6863419d225506c822d87b01c35706133002c40d",
+    "requirejs": "~2.1.14",
+    "requirejs-domready": "~2.0.1",
+    "dat-gui": "~0.5.0"
   }
 }
