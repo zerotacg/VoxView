@@ -1,13 +1,14 @@
 require.config({
     paths: {
-        'dat': 'libs/dat-gui/build/dat.gui'
+        'dat': 'libs/dat-gui/src/dat'
       , 'three': 'libs/threejs/build/three'
       , 'three.orbitcontrols': 'OrbitControls'
+      , 'text': 'libs/requirejs-text/text'
+      , 'domReady': 'libs/requirejs-domReady/domReady'
     }
 
   , shim: {
-        'dat': { exports: 'dat' }
-      , 'Detector': { exports: 'Detector' }
+        'Detector': { exports: 'Detector' }
       , 'three': { exports: 'THREE' }
       , 'three.orbitcontrols': {
             deps: [ 'three' ]
@@ -17,23 +18,25 @@ require.config({
 });
 
 define(function(require){
-    var three       = require( 'three' )
-      , dat         = require( 'dat' )
-      , VoxView     = require( 'VoxView' )
+    var VoxView     = require( 'VoxView' )
       , VoxViewApp  = require( 'VoxView/App' )
-
-      , initialState  = window.location.search.substring(1)
-      , displayDiv    = document.getElementById('voxViewDisplay')
-      , corners
       ;
-    if (initialState) {
-      corners = VoxView.readQueryString(initialState);
-    }
-    voxObject = new VoxViewApp({ cornerLocs: corners,
-                                 container: displayDiv,
-                                 width: 800,
-                                 height: 600 });
 
-    // Start animation loop
-    voxObject.animate();
+    require(['domReady!'], function (doc){
+        var initialState  = window.location.search.substring(1)
+          , displayDiv    = document.getElementById('voxViewDisplay')
+          , corners
+          ;
+        if (initialState) {
+          corners = VoxView.readQueryString(initialState);
+        }
+
+        voxObject = new VoxViewApp({ cornerLocs: corners,
+                                     container: displayDiv,
+                                     width: 800,
+                                     height: 600 });
+
+        // Start animation loop
+        voxObject.animate();
+    });
 });

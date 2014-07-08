@@ -26,6 +26,7 @@
     "requirejs": "~2.1.14",
     "requirejs-domready": "~2.0.1",
     "dat-gui": "~0.5.0",
-    "almond": "~0.2.9"
+    "almond": "~0.2.9",
+    "requirejs-text": "~2.0.12"
   }
 }

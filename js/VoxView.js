@@ -1,5 +1,6 @@
 define(function(require){
-  var THREE     = require( 'three' )
+  var THREE = require( 'three' )
+    , GUI   = require( 'dat/gui/GUI' )
     ;
 
   //
@@ -116,7 +117,7 @@ define(function(require){
   }
 
   VoxView.initGui = function(model, grid) {
-    var gui = new dat.GUI();
+    var gui = new GUI();
 
     for (var i = 0; i < 8; i++) {
       var folder = gui.addFolder(VoxView.CORNER[i].name);
