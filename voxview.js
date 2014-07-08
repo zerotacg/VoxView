@@ -422,6 +422,136 @@ var requirejs, require, define;
 
 define("libs/almond/almond", function(){});
 
+/**
+ * @license RequireJS domReady 2.0.1 Copyright (c) 2010-2012, The Dojo Foundation All Rights Reserved.
+ * Available via the MIT or new BSD license.
+ * see: http://github.com/requirejs/domReady for details
+ */
+/*jslint */
+/*global require: false, define: false, requirejs: false,
+  window: false, clearInterval: false, document: false,
+  self: false, setInterval: false */
+
+
+define('domReady',[],function () {
+    
+
+    var isTop, testDiv, scrollIntervalId,
+        isBrowser = typeof window !== "undefined" && window.document,
+        isPageLoaded = !isBrowser,
+        doc = isBrowser ? document : null,
+        readyCalls = [];
+
+    function runCallbacks(callbacks) {
+        var i;
+        for (i = 0; i < callbacks.length; i += 1) {
+            callbacks[i](doc);
+        }
+    }
+
+    function callReady() {
+        var callbacks = readyCalls;
+
+        if (isPageLoaded) {
+            //Call the DOM ready callbacks
+            if (callbacks.length) {
+                readyCalls = [];
+                runCallbacks(callbacks);
+            }
+        }
+    }
+
+    /**
+     * Sets the page as loaded.
+     */
+    function pageLoaded() {
+        if (!isPageLoaded) {
+            isPageLoaded = true;
+            if (scrollIntervalId) {
+                clearInterval(scrollIntervalId);
+            }
+
+            callReady();
+        }
+    }
+
+    if (isBrowser) {
+        if (document.addEventListener) {
+            //Standards. Hooray! Assumption here that if standards based,
+            //it knows about DOMContentLoaded.
+            document.addEventListener("DOMContentLoaded", pageLoaded, false);
+            window.addEventListener("load", pageLoaded, false);
+        } else if (window.attachEvent) {
+            window.attachEvent("onload", pageLoaded);
+
+            testDiv = document.createElement('div');
+            try {
+                isTop = window.frameElement === null;
+            } catch (e) {}
+
+            //DOMContentLoaded approximation that uses a doScroll, as found by
+            //Diego Perini: http://javascript.nwbox.com/IEContentLoaded/,
+            //but modified by other contributors, including jdalton
+            if (testDiv.doScroll && isTop && window.external) {
+                scrollIntervalId = setInterval(function () {
+                    try {
+                        testDiv.doScroll();
+                        pageLoaded();
+                    } catch (e) {}
+                }, 30);
+            }
+        }
+
+        //Check if document already complete, and if so, just trigger page load
+        //listeners. Latest webkit browsers also use "interactive", and
+        //will fire the onDOMContentLoaded before "interactive" but not after
+        //entering "interactive" or "complete". More details:
+        //http://dev.w3.org/html5/spec/the-end.html#the-end
+        //http://stackoverflow.com/questions/3665561/document-readystate-of-interactive-vs-ondomcontentloaded
+        //Hmm, this is more complicated on further use, see "firing too early"
+        //bug: https://github.com/requirejs/domReady/issues/1
+        //so removing the || document.readyState === "interactive" test.
+        //There is still a window.onload binding that should get fired if
+        //DOMContentLoaded is missed.
+        if (document.readyState === "complete") {
+            pageLoaded();
+        }
+    }
+
+    /** START OF PUBLIC API **/
+
+    /**
+     * Registers a callback for DOM ready. If DOM is already ready, the
+     * callback is called immediately.
+     * @param {Function} callback
+     */
+    function domReady(callback) {
+        if (isPageLoaded) {
+            callback(doc);
+        } else {
+            readyCalls.push(callback);
+        }
+        return domReady;
+    }
+
+    domReady.version = '2.0.1';
+
+    /**
+     * Loader Plugin API method
+     */
+    domReady.load = function (name, req, onLoad, config) {
+        if (config.isBuild) {
+            onLoad(null);
+        } else {
+            domReady(onLoad);
+        }
+    };
+
+    /** END OF PUBLIC API **/
+
+    return domReady;
+});
+
 (function(root) {
 define("three", [], function() {
   return (function() {
@@ -38922,9 +39052,6 @@ return root.THREE = THREE;
 });
 }(this));
 
-(function(root) {
-define("dat", [], function() {
-  return (function() {
 /**
  * dat-gui JavaScript Controller Library
  * http://code.google.com/p/dat-gui
@@ -38938,25 +39065,8 @@ define("dat", [], function() {
  * http://www.apache.org/licenses/LICENSE-2.0
  */
 
-/** @namespace */
-var dat = dat || {};
-
-/** @namespace */
-dat.gui = dat.gui || {};
-
-/** @namespace */
-dat.utils = dat.utils || {};
-
-/** @namespace */
-dat.controllers = dat.controllers || {};
-
-/** @namespace */
-dat.dom = dat.dom || {};
-
-/** @namespace */
-dat.color = dat.color || {};
-
-dat.utils.css = (function () {
+define('dat/utils/css',[],
+function() {
   return {
     load: function (url, doc) {
       doc = doc || document;
@@ -38974,10 +39084,420 @@ dat.utils.css = (function () {
       doc.getElementsByTagName('head')[0].appendChild(injected);
     }
   }
-})();
+});
+
+/**
+ * @license RequireJS text 2.0.12 Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
+ * Available via the MIT or new BSD license.
+ * see: http://github.com/requirejs/text for details
+ */
+/*jslint regexp: true */
+/*global require, XMLHttpRequest, ActiveXObject,
+  define, window, process, Packages,
+  java, location, Components, FileUtils */
+
+define('text',['module'], function (module) {
+    
+
+    var text, fs, Cc, Ci, xpcIsWindows,
+        progIds = ['Msxml2.XMLHTTP', 'Microsoft.XMLHTTP', 'Msxml2.XMLHTTP.4.0'],
+        xmlRegExp = /^\s*<\?xml(\s)+version=[\'\"](\d)*.(\d)*[\'\"](\s)*\?>/im,
+        bodyRegExp = /<body[^>]*>\s*([\s\S]+)\s*<\/body>/im,
+        hasLocation = typeof location !== 'undefined' && location.href,
+        defaultProtocol = hasLocation && location.protocol && location.protocol.replace(/\:/, ''),
+        defaultHostName = hasLocation && location.hostname,
+        defaultPort = hasLocation && (location.port || undefined),
+        buildMap = {},
+        masterConfig = (module.config && module.config()) || {};
+
+    text = {
+        version: '2.0.12',
+
+        strip: function (content) {
+            //Strips <?xml ...?> declarations so that external SVG and XML
+            //documents can be added to a document without worry. Also, if the string
+            //is an HTML document, only the part inside the body tag is returned.
+            if (content) {
+                content = content.replace(xmlRegExp, "");
+                var matches = content.match(bodyRegExp);
+                if (matches) {
+                    content = matches[1];
+                }
+            } else {
+                content = "";
+            }
+            return content;
+        },
+
+        jsEscape: function (content) {
+            return content.replace(/(['\\])/g, '\\$1')
+                .replace(/[\f]/g, "\\f")
+                .replace(/[\b]/g, "\\b")
+                .replace(/[\n]/g, "\\n")
+                .replace(/[\t]/g, "\\t")
+                .replace(/[\r]/g, "\\r")
+                .replace(/[\u2028]/g, "\\u2028")
+                .replace(/[\u2029]/g, "\\u2029");
+        },
+
+        createXhr: masterConfig.createXhr || function () {
+            //Would love to dump the ActiveX crap in here. Need IE 6 to die first.
+            var xhr, i, progId;
+            if (typeof XMLHttpRequest !== "undefined") {
+                return new XMLHttpRequest();
+            } else if (typeof ActiveXObject !== "undefined") {
+                for (i = 0; i < 3; i += 1) {
+                    progId = progIds[i];
+                    try {
+                        xhr = new ActiveXObject(progId);
+                    } catch (e) {}
+
+                    if (xhr) {
+                        progIds = [progId];  // so faster next time
+                        break;
+                    }
+                }
+            }
+
+            return xhr;
+        },
+
+        /**
+         * Parses a resource name into its component parts. Resource names
+         * look like: module/name.ext!strip, where the !strip part is
+         * optional.
+         * @param {String} name the resource name
+         * @returns {Object} with properties "moduleName", "ext" and "strip"
+         * where strip is a boolean.
+         */
+        parseName: function (name) {
+            var modName, ext, temp,
+                strip = false,
+                index = name.indexOf("."),
+                isRelative = name.indexOf('./') === 0 ||
+                             name.indexOf('../') === 0;
+
+            if (index !== -1 && (!isRelative || index > 1)) {
+                modName = name.substring(0, index);
+                ext = name.substring(index + 1, name.length);
+            } else {
+                modName = name;
+            }
+
+            temp = ext || modName;
+            index = temp.indexOf("!");
+            if (index !== -1) {
+                //Pull off the strip arg.
+                strip = temp.substring(index + 1) === "strip";
+                temp = temp.substring(0, index);
+                if (ext) {
+                    ext = temp;
+                } else {
+                    modName = temp;
+                }
+            }
+
+            return {
+                moduleName: modName,
+                ext: ext,
+                strip: strip
+            };
+        },
+
+        xdRegExp: /^((\w+)\:)?\/\/([^\/\\]+)/,
+
+        /**
+         * Is an URL on another domain. Only works for browser use, returns
+         * false in non-browser environments. Only used to know if an
+         * optimized .js version of a text resource should be loaded
+         * instead.
+         * @param {String} url
+         * @returns Boolean
+         */
+        useXhr: function (url, protocol, hostname, port) {
+            var uProtocol, uHostName, uPort,
+                match = text.xdRegExp.exec(url);
+            if (!match) {
+                return true;
+            }
+            uProtocol = match[2];
+            uHostName = match[3];
+
+            uHostName = uHostName.split(':');
+            uPort = uHostName[1];
+            uHostName = uHostName[0];
+
+            return (!uProtocol || uProtocol === protocol) &&
+                   (!uHostName || uHostName.toLowerCase() === hostname.toLowerCase()) &&
+                   ((!uPort && !uHostName) || uPort === port);
+        },
+
+        finishLoad: function (name, strip, content, onLoad) {
+            content = strip ? text.strip(content) : content;
+            if (masterConfig.isBuild) {
+                buildMap[name] = content;
+            }
+            onLoad(content);
+        },
+
+        load: function (name, req, onLoad, config) {
+            //Name has format: some.module.filext!strip
+            //The strip part is optional.
+            //if strip is present, then that means only get the string contents
+            //inside a body tag in an HTML string. For XML/SVG content it means
+            //removing the <?xml ...?> declarations so the content can be inserted
+            //into the current doc without problems.
+
+            // Do not bother with the work if a build and text will
+            // not be inlined.
+            if (config && config.isBuild && !config.inlineText) {
+                onLoad();
+                return;
+            }
+
+            masterConfig.isBuild = config && config.isBuild;
+
+            var parsed = text.parseName(name),
+                nonStripName = parsed.moduleName +
+                    (parsed.ext ? '.' + parsed.ext : ''),
+                url = req.toUrl(nonStripName),
+                useXhr = (masterConfig.useXhr) ||
+                         text.useXhr;
+
+            // Do not load if it is an empty: url
+            if (url.indexOf('empty:') === 0) {
+                onLoad();
+                return;
+            }
+
+            //Load the text. Use XHR if possible and in a browser.
+            if (!hasLocation || useXhr(url, defaultProtocol, defaultHostName, defaultPort)) {
+                text.get(url, function (content) {
+                    text.finishLoad(name, parsed.strip, content, onLoad);
+                }, function (err) {
+                    if (onLoad.error) {
+                        onLoad.error(err);
+                    }
+                });
+            } else {
+                //Need to fetch the resource across domains. Assume
+                //the resource has been optimized into a JS module. Fetch
+                //by the module name + extension, but do not include the
+                //!strip part to avoid file system issues.
+                req([nonStripName], function (content) {
+                    text.finishLoad(parsed.moduleName + '.' + parsed.ext,
+                                    parsed.strip, content, onLoad);
+                });
+            }
+        },
+
+        write: function (pluginName, moduleName, write, config) {
+            if (buildMap.hasOwnProperty(moduleName)) {
+                var content = text.jsEscape(buildMap[moduleName]);
+                write.asModule(pluginName + "!" + moduleName,
+                               "define(function () { return '" +
+                                   content +
+                               "';});\n");
+            }
+        },
+
+        writeFile: function (pluginName, moduleName, req, write, config) {
+            var parsed = text.parseName(moduleName),
+                extPart = parsed.ext ? '.' + parsed.ext : '',
+                nonStripName = parsed.moduleName + extPart,
+                //Use a '.js' file name so that it indicates it is a
+                //script that can be loaded across domains.
+                fileName = req.toUrl(parsed.moduleName + extPart) + '.js';
+
+            //Leverage own load() method to load plugin value, but only
+            //write out values that do not have the strip argument,
+            //to avoid any potential issues with ! in file names.
+            text.load(nonStripName, req, function (value) {
+                //Use own write() method to construct full module value.
+                //But need to create shell that translates writeFile's
+                //write() to the right interface.
+                var textWrite = function (contents) {
+                    return write(fileName, contents);
+                };
+                textWrite.asModule = function (moduleName, contents) {
+                    return write.asModule(moduleName, fileName, contents);
+                };
+
+                text.write(pluginName, nonStripName, textWrite, config);
+            }, config);
+        }
+    };
+
+    if (masterConfig.env === 'node' || (!masterConfig.env &&
+            typeof process !== "undefined" &&
+            process.versions &&
+            !!process.versions.node &&
+            !process.versions['node-webkit'])) {
+        //Using special require.nodeRequire, something added by r.js.
+        fs = require.nodeRequire('fs');
+
+        text.get = function (url, callback, errback) {
+            try {
+                var file = fs.readFileSync(url, 'utf8');
+                //Remove BOM (Byte Mark Order) from utf8 files if it is there.
+                if (file.indexOf('\uFEFF') === 0) {
+                    file = file.substring(1);
+                }
+                callback(file);
+            } catch (e) {
+                if (errback) {
+                    errback(e);
+                }
+            }
+        };
+    } else if (masterConfig.env === 'xhr' || (!masterConfig.env &&
+            text.createXhr())) {
+        text.get = function (url, callback, errback, headers) {
+            var xhr = text.createXhr(), header;
+            xhr.open('GET', url, true);
+
+            //Allow plugins direct access to xhr headers
+            if (headers) {
+                for (header in headers) {
+                    if (headers.hasOwnProperty(header)) {
+                        xhr.setRequestHeader(header.toLowerCase(), headers[header]);
+                    }
+                }
+            }
+
+            //Allow overrides specified in config
+            if (masterConfig.onXhr) {
+                masterConfig.onXhr(xhr, url);
+            }
+
+            xhr.onreadystatechange = function (evt) {
+                var status, err;
+                //Do not explicitly handle errors, those should be
+                //visible via console output in the browser.
+                if (xhr.readyState === 4) {
+                    status = xhr.status || 0;
+                    if (status > 399 && status < 600) {
+                        //An http 4xx or 5xx error. Signal an error.
+                        err = new Error(url + ' HTTP status: ' + status);
+                        err.xhr = xhr;
+                        if (errback) {
+                            errback(err);
+                        }
+                    } else {
+                        callback(xhr.responseText);
+                    }
+
+                    if (masterConfig.onXhrComplete) {
+                        masterConfig.onXhrComplete(xhr, url);
+                    }
+                }
+            };
+            xhr.send(null);
+        };
+    } else if (masterConfig.env === 'rhino' || (!masterConfig.env &&
+            typeof Packages !== 'undefined' && typeof java !== 'undefined')) {
+        //Why Java, why is this so awkward?
+        text.get = function (url, callback) {
+            var stringBuffer, line,
+                encoding = "utf-8",
+                file = new java.io.File(url),
+                lineSeparator = java.lang.System.getProperty("line.separator"),
+                input = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(file), encoding)),
+                content = '';
+            try {
+                stringBuffer = new java.lang.StringBuffer();
+                line = input.readLine();
+
+                // Byte Order Mark (BOM) - The Unicode Standard, version 3.0, page 324
+                // http://www.unicode.org/faq/utf_bom.html
+
+                // Note that when we use utf-8, the BOM should appear as "EF BB BF", but it doesn't due to this bug in the JDK:
+                // http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4508058
+                if (line && line.length() && line.charAt(0) === 0xfeff) {
+                    // Eat the BOM, since we've already found the encoding on this file,
+                    // and we plan to concatenating this buffer with others; the BOM should
+                    // only appear at the top of a file.
+                    line = line.substring(1);
+                }
+
+                if (line !== null) {
+                    stringBuffer.append(line);
+                }
+
+                while ((line = input.readLine()) !== null) {
+                    stringBuffer.append(lineSeparator);
+                    stringBuffer.append(line);
+                }
+                //Make sure we return a JavaScript string and not a Java string.
+                content = String(stringBuffer.toString()); //String
+            } finally {
+                input.close();
+            }
+            callback(content);
+        };
+    } else if (masterConfig.env === 'xpconnect' || (!masterConfig.env &&
+            typeof Components !== 'undefined' && Components.classes &&
+            Components.interfaces)) {
+        //Avert your gaze!
+        Cc = Components.classes;
+        Ci = Components.interfaces;
+        Components.utils['import']('resource://gre/modules/FileUtils.jsm');
+        xpcIsWindows = ('@mozilla.org/windows-registry-key;1' in Cc);
+
+        text.get = function (url, callback) {
+            var inStream, convertStream, fileObj,
+                readData = {};
+
+            if (xpcIsWindows) {
+                url = url.replace(/\//g, '\\');
+            }
+
+            fileObj = new FileUtils.File(url);
+
+            //XPCOM, you so crazy
+            try {
+                inStream = Cc['@mozilla.org/network/file-input-stream;1']
+                           .createInstance(Ci.nsIFileInputStream);
+                inStream.init(fileObj, 1, 0, false);
+
+                convertStream = Cc['@mozilla.org/intl/converter-input-stream;1']
+                                .createInstance(Ci.nsIConverterInputStream);
+                convertStream.init(inStream, "utf-8", inStream.available(),
+                Ci.nsIConverterInputStream.DEFAULT_REPLACEMENT_CHARACTER);
+
+                convertStream.readString(inStream.available(), readData);
+                convertStream.close();
+                inStream.close();
+                callback(readData.value);
+            } catch (e) {
+                throw new Error((fileObj && fileObj.path || '') + ': ' + e);
+            }
+        };
+    }
+    return text;
+});
 
 
-dat.utils.common = (function () {
+define('text!dat/gui/saveDialogue.html',[],function () { return '<div id="dg-save" class="dg dialogue">\n\n  Here\'s the new load parameter for your <code>GUI</code>\'s constructor:\n\n  <textarea id="dg-new-constructor"></textarea>\n\n  <div id="dg-save-locally">\n\n    <input id="dg-local-storage" type="checkbox"/> Automatically save\n    values to <code>localStorage</code> on exit.\n\n    <div id="dg-local-explain">The values saved to <code>localStorage</code> will\n      override those passed to <code>dat.GUI</code>\'s constructor. This makes it\n      easier to work incrementally, but <code>localStorage</code> is fragile,\n      and your friends may not see the same values you do.\n      \n    </div>\n    \n  </div>\n\n</div>';});
+
+
+define('text!dat/gui/style.css',[],function () { return '.dg {\n  /** Clear list styles */\n  /* Auto-place container */\n  /* Auto-placed GUI\'s */\n  /* Line items that don\'t contain folders. */\n  /** Folder names */\n  /** Hides closed items */\n  /** Controller row */\n  /** Name-half (left) */\n  /** Controller-half (right) */\n  /** Controller placement */\n  /** Shorter number boxes when slider is present. */\n  /** Ensure the entire boolean and function row shows a hand */ }\n  .dg ul {\n    list-style: none;\n    margin: 0;\n    padding: 0;\n    width: 100%;\n    clear: both; }\n  .dg.ac {\n    position: fixed;\n    top: 0;\n    left: 0;\n    right: 0;\n    height: 0;\n    z-index: 0; }\n  .dg:not(.ac) .main {\n    /** Exclude mains in ac so that we don\'t hide close button */\n    overflow: hidden; }\n  .dg.main {\n    -webkit-transition: opacity 0.1s linear;\n    -o-transition: opacity 0.1s linear;\n    -moz-transition: opacity 0.1s linear;\n    transition: opacity 0.1s linear; }\n    .dg.main.taller-than-window {\n      overflow-y: auto; }\n      .dg.main.taller-than-window .close-button {\n        opacity: 1;\n        /* TODO, these are style notes */\n        margin-top: -1px;\n        border-top: 1px solid #2c2c2c; }\n    .dg.main ul.closed .close-button {\n      opacity: 1 !important; }\n    .dg.main:hover .close-button,\n    .dg.main .close-button.drag {\n      opacity: 1; }\n    .dg.main .close-button {\n      /*opacity: 0;*/\n      -webkit-transition: opacity 0.1s linear;\n      -o-transition: opacity 0.1s linear;\n      -moz-transition: opacity 0.1s linear;\n      transition: opacity 0.1s linear;\n      border: 0;\n      position: absolute;\n      line-height: 19px;\n      height: 20px;\n      /* TODO, these are style notes */\n      cursor: pointer;\n      text-align: center;\n      background-color: #000; }\n      .dg.main .close-button:hover {\n        background-color: #111; }\n  .dg.a {\n    float: right;\n    margin-right: 15px;\n    overflow-x: hidden; }\n    .dg.a.has-save > ul {\n      margin-top: 27px; }\n      .dg.a.has-save > ul.closed {\n        margin-top: 0; }\n    .dg.a .save-row {\n      position: fixed;\n      top: 0;\n      z-index: 1002; }\n  .dg li {\n    -webkit-transition: height 0.1s ease-out;\n    -o-transition: height 0.1s ease-out;\n    -moz-transition: height 0.1s ease-out;\n    transition: height 0.1s ease-out; }\n  .dg li:not(.folder) {\n    cursor: auto;\n    height: 27px;\n    line-height: 27px;\n    overflow: hidden;\n    padding: 0 4px 0 5px; }\n  .dg li.folder {\n    padding: 0;\n    border-left: 4px solid rgba(0, 0, 0, 0); }\n  .dg li.title {\n    cursor: pointer;\n    margin-left: -4px; }\n  .dg .closed li:not(.title),\n  .dg .closed ul li,\n  .dg .closed ul li > * {\n    height: 0;\n    overflow: hidden;\n    border: 0; }\n  .dg .cr {\n    clear: both;\n    padding-left: 3px;\n    height: 27px; }\n  .dg .property-name {\n    cursor: default;\n    float: left;\n    clear: left;\n    width: 40%;\n    overflow: hidden;\n    text-overflow: ellipsis; }\n  .dg .c {\n    float: left;\n    width: 60%; }\n  .dg .c input[type=text] {\n    border: 0;\n    margin-top: 4px;\n    padding: 3px;\n    width: 100%;\n    float: right; }\n  .dg .has-slider input[type=text] {\n    width: 30%;\n    /*display: none;*/\n    margin-left: 0; }\n  .dg .slider {\n    float: left;\n    width: 66%;\n    margin-left: -5px;\n    margin-right: 0;\n    height: 19px;\n    margin-top: 4px; }\n  .dg .slider-fg {\n    height: 100%; }\n  .dg .c input[type=checkbox] {\n    margin-top: 9px; }\n  .dg .c select {\n    margin-top: 5px; }\n  .dg .cr.function,\n  .dg .cr.function .property-name,\n  .dg .cr.function *,\n  .dg .cr.boolean,\n  .dg .cr.boolean * {\n    cursor: pointer; }\n  .dg .selector {\n    display: none;\n    position: absolute;\n    margin-left: -9px;\n    margin-top: 23px;\n    z-index: 10; }\n  .dg .c:hover .selector,\n  .dg .selector.drag {\n    display: block; }\n  .dg li.save-row {\n    padding: 0; }\n    .dg li.save-row .button {\n      display: inline-block;\n      padding: 0px 6px; }\n  .dg.dialogue {\n    background-color: #222;\n    width: 460px;\n    padding: 15px;\n    font-size: 13px;\n    line-height: 15px; }\n\n/* TODO Separate style and structure */\n#dg-new-constructor {\n  padding: 10px;\n  color: #222;\n  font-family: Monaco, monospace;\n  font-size: 10px;\n  border: 0;\n  resize: none;\n  box-shadow: inset 1px 1px 1px #888;\n  word-wrap: break-word;\n  margin: 12px 0;\n  display: block;\n  width: 440px;\n  overflow-y: scroll;\n  height: 100px;\n  position: relative; }\n\n#dg-local-explain {\n  display: none;\n  font-size: 11px;\n  line-height: 17px;\n  border-radius: 3px;\n  background-color: #333;\n  padding: 8px;\n  margin-top: 10px; }\n  #dg-local-explain code {\n    font-size: 10px; }\n\n#dat-gui-save-locally {\n  display: none; }\n\n/** Main type */\n.dg {\n  color: #eee;\n  font: 11px \'Lucida Grande\', sans-serif;\n  text-shadow: 0 -1px 0 #111;\n  /** Auto place */\n  /* Controller row, <li> */\n  /** Controllers */ }\n  .dg.main {\n    /** Scrollbar */ }\n    .dg.main::-webkit-scrollbar {\n      width: 5px;\n      background: #1a1a1a; }\n    .dg.main::-webkit-scrollbar-corner {\n      height: 0;\n      display: none; }\n    .dg.main::-webkit-scrollbar-thumb {\n      border-radius: 5px;\n      background: #676767; }\n  .dg li:not(.folder) {\n    background: #1a1a1a;\n    border-bottom: 1px solid #2c2c2c; }\n  .dg li.save-row {\n    line-height: 25px;\n    background: #dad5cb;\n    border: 0; }\n    .dg li.save-row select {\n      margin-left: 5px;\n      width: 108px; }\n    .dg li.save-row .button {\n      margin-left: 5px;\n      margin-top: 1px;\n      border-radius: 2px;\n      font-size: 9px;\n      line-height: 7px;\n      padding: 4px 4px 5px 4px;\n      background: #c5bdad;\n      color: #fff;\n      text-shadow: 0 1px 0 #b0a58f;\n      box-shadow: 0 -1px 0 #b0a58f;\n      cursor: pointer; }\n      .dg li.save-row .button.gears {\n        background: #c5bdad url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAsAAAANCAYAAAB/9ZQ7AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAQJJREFUeNpiYKAU/P//PwGIC/ApCABiBSAW+I8AClAcgKxQ4T9hoMAEUrxx2QSGN6+egDX+/vWT4e7N82AMYoPAx/evwWoYoSYbACX2s7KxCxzcsezDh3evFoDEBYTEEqycggWAzA9AuUSQQgeYPa9fPv6/YWm/Acx5IPb7ty/fw+QZblw67vDs8R0YHyQhgObx+yAJkBqmG5dPPDh1aPOGR/eugW0G4vlIoTIfyFcA+QekhhHJhPdQxbiAIguMBTQZrPD7108M6roWYDFQiIAAv6Aow/1bFwXgis+f2LUAynwoIaNcz8XNx3Dl7MEJUDGQpx9gtQ8YCueB+D26OECAAQDadt7e46D42QAAAABJRU5ErkJggg==) 2px 1px no-repeat;\n        height: 7px;\n        width: 8px; }\n      .dg li.save-row .button:hover {\n        background-color: #bab19e;\n        box-shadow: 0 -1px 0 #b0a58f; }\n  .dg li.folder {\n    border-bottom: 0; }\n  .dg li.title {\n    padding-left: 16px;\n    background: black url(data:image/gif;base64,R0lGODlhBQAFAJEAAP////Pz8////////yH5BAEAAAIALAAAAAAFAAUAAAIIlI+hKgFxoCgAOw==) 6px 10px no-repeat;\n    cursor: pointer;\n    border-bottom: 1px solid rgba(255, 255, 255, 0.2); }\n  .dg .closed li.title {\n    background-image: url(data:image/gif;base64,R0lGODlhBQAFAJEAAP////Pz8////////yH5BAEAAAIALAAAAAAFAAUAAAIIlGIWqMCbWAEAOw==); }\n  .dg .cr.boolean {\n    border-left: 3px solid #806787; }\n  .dg .cr.function {\n    border-left: 3px solid #e61d5f; }\n  .dg .cr.number {\n    border-left: 3px solid #2fa1d6; }\n    .dg .cr.number input[type=text] {\n      color: #2fa1d6; }\n  .dg .cr.string {\n    border-left: 3px solid #1ed36f; }\n    .dg .cr.string input[type=text] {\n      color: #1ed36f; }\n  .dg .cr.function:hover, .dg .cr.boolean:hover {\n    background: #111; }\n  .dg .c input[type=text] {\n    background: #303030;\n    outline: none; }\n    .dg .c input[type=text]:hover {\n      background: #3c3c3c; }\n    .dg .c input[type=text]:focus {\n      background: #494949;\n      color: #fff; }\n  .dg .c .slider {\n    background: #303030;\n    cursor: ew-resize; }\n  .dg .c .slider-fg {\n    background: #2fa1d6; }\n  .dg .c .slider:hover {\n    background: #3c3c3c; }\n    .dg .c .slider:hover .slider-fg {\n      background: #44abda; }\n';});
+
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/utils/common',[
+], function() {
   
   var ARR_EACH = Array.prototype.forEach;
   var ARR_SLICE = Array.prototype.slice;
@@ -39101,10 +39621,23 @@ dat.utils.common = (function () {
   
   };
     
-})();
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
-
-dat.controllers.Controller = (function (common) {
+define('dat/controllers/Controller',[
+   'dat/utils/common'
+], function(common) {
 
   /**
    * @class An "abstract" class that represents a given property of an object.
@@ -39232,10 +39765,23 @@ dat.controllers.Controller = (function (common) {
   return Controller;
 
 
-})(dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
-
-dat.dom.dom = (function (common) {
+define('dat/dom/dom',[
+  'dat/utils/common'
+], function(common) {
 
   var EVENT_MAP = {
     'HTMLEvents': ['change'],
@@ -39506,10 +40052,26 @@ dat.dom.dom = (function (common) {
 
   return dom;
 
-})(dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
-
-dat.controllers.OptionController = (function (Controller, dom, common) {
+define('dat/controllers/OptionController',[
+    'dat/controllers/Controller',
+    'dat/dom/dom',
+    'dat/utils/common'
+],
+function(Controller, dom, common) {
 
   /**
    * @class Provides a select input to alter the property of an object, using a
@@ -39593,12 +40155,24 @@ dat.controllers.OptionController = (function (Controller, dom, common) {
 
   return OptionController;
 
-})(dat.controllers.Controller,
-dat.dom.dom,
-dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
-
-dat.controllers.NumberController = (function (Controller, common) {
+define('dat/controllers/NumberController',[
+    'dat/controllers/Controller',
+    'dat/utils/common'
+], function(Controller, common) {
 
   /**
    * @class Represents a given property of an object that is a number.
@@ -39706,6 +40280,8 @@ dat.controllers.NumberController = (function (Controller, common) {
          */
         step: function(v) {
           this.__step = v;
+          this.__impliedStep = v;
+          this.__precision = numDecimals(v);
           return this;
         }
 
@@ -39724,11 +40300,25 @@ dat.controllers.NumberController = (function (Controller, common) {
 
   return NumberController;
 
-})(dat.controllers.Controller,
-dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
-
-dat.controllers.NumberControllerBox = (function (NumberController, dom, common) {
+define('dat/controllers/NumberControllerBox',[
+  'dat/controllers/NumberController',
+  'dat/dom/dom',
+  'dat/utils/common'
+], function(NumberController, dom, common) {
 
   /**
    * @class Represents a given property of an object that is a number and
@@ -39843,12 +40433,33 @@ dat.controllers.NumberControllerBox = (function (NumberController, dom, common) 
 
   return NumberControllerBox;
 
-})(dat.controllers.NumberController,
-dat.dom.dom,
-dat.utils.common);
+});
 
 
-dat.controllers.NumberControllerSlider = (function (NumberController, dom, css, common, styleSheet) {
+
+define('text!dat/controllers/NumberControllerSlider.css',[],function () { return '/**\n * dat-gui JavaScript Controller Library\n * http://code.google.com/p/dat-gui\n *\n * Copyright 2011 Data Arts Team, Google Creative Lab\n *\n * Licensed under the Apache License, Version 2.0 (the "License");\n * you may not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n * http://www.apache.org/licenses/LICENSE-2.0\n */\n\n.slider {\n  box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);\n  height: 1em;\n  border-radius: 1em;\n  background-color: #eee;\n  padding: 0 0.5em;\n  overflow: hidden;\n}\n\n.slider-fg {\n  padding: 1px 0 2px 0;\n  background-color: #aaa;\n  height: 1em;\n  margin-left: -0.5em;\n  padding-right: 0.5em;\n  border-radius: 1em 0 0 1em;\n}\n\n.slider-fg:after {\n  display: inline-block;\n  border-radius: 1em;\n  background-color: #fff;\n  border:  1px solid #aaa;\n  content: \'\';\n  float: right;\n  margin-right: -1em;\n  margin-top: -1px;\n  height: 0.9em;\n  width: 0.9em;\n}';});
+
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/controllers/NumberControllerSlider',[
+    'dat/controllers/NumberController',
+    'dat/dom/dom',
+    'dat/utils/css',
+    'dat/utils/common',
+    'text!dat/controllers/NumberControllerSlider.css'
+], 
+function(NumberController, dom, css, common, styleSheet) {
 
   /**
    * @class Represents a given property of an object that is a number, contains
@@ -39956,14 +40567,114 @@ dat.controllers.NumberControllerSlider = (function (NumberController, dom, css, 
 
   return NumberControllerSlider;
   
-})(dat.controllers.NumberController,
-dat.dom.dom,
-dat.utils.css,
-dat.utils.common,
-"/**\n * dat-gui JavaScript Controller Library\n * http://code.google.com/p/dat-gui\n *\n * Copyright 2011 Data Arts Team, Google Creative Lab\n *\n * Licensed under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n * http://www.apache.org/licenses/LICENSE-2.0\n */\n\n.slider {\n  box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);\n  height: 1em;\n  border-radius: 1em;\n  background-color: #eee;\n  padding: 0 0.5em;\n  overflow: hidden;\n}\n\n.slider-fg {\n  padding: 1px 0 2px 0;\n  background-color: #aaa;\n  height: 1em;\n  margin-left: -0.5em;\n  padding-right: 0.5em;\n  border-radius: 1em 0 0 1em;\n}\n\n.slider-fg:after {\n  display: inline-block;\n  border-radius: 1em;\n  background-color: #fff;\n  border:  1px solid #aaa;\n  content: '';\n  float: right;\n  margin-right: -1em;\n  margin-top: -1px;\n  height: 0.9em;\n  width: 0.9em;\n}");
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
+define('dat/controllers/StringController',[
+    'dat/controllers/Controller',
+    'dat/dom/dom',
+    'dat/utils/common'
+], function(Controller, dom, common) {
 
-dat.controllers.FunctionController = (function (Controller, dom, common) {
+  /**
+   * @class Provides a text input to alter the string property of an object.
+   *
+   * @extends dat.controllers.Controller
+   *
+   * @param {Object} object The object to be manipulated
+   * @param {string} property The name of the property to be manipulated
+   *
+   * @member dat.controllers
+   */
+  var StringController = function(object, property) {
+
+    StringController.superclass.call(this, object, property);
+
+    var _this = this;
+
+    this.__input = document.createElement('input');
+    this.__input.setAttribute('type', 'text');
+
+    dom.bind(this.__input, 'keyup', onChange);
+    dom.bind(this.__input, 'change', onChange);
+    dom.bind(this.__input, 'blur', onBlur);
+    dom.bind(this.__input, 'keydown', function(e) {
+      if (e.keyCode === 13) {
+        this.blur();
+      }
+    });
+    
+
+    function onChange() {
+      _this.setValue(_this.__input.value);
+    }
+
+    function onBlur() {
+      if (_this.__onFinishChange) {
+        _this.__onFinishChange.call(_this, _this.getValue());
+      }
+    }
+
+    this.updateDisplay();
+
+    this.domElement.appendChild(this.__input);
+
+  };
+
+  StringController.superclass = Controller;
+
+  common.extend(
+
+      StringController.prototype,
+      Controller.prototype,
+
+      {
+
+        updateDisplay: function() {
+          // Stops the caret from moving on account of:
+          // keyup -> setValue -> updateDisplay
+          if (!dom.isActive(this.__input)) {
+            this.__input.value = this.getValue();
+          }
+          return StringController.superclass.prototype.updateDisplay.call(this);
+        }
+
+      }
+
+  );
+
+  return StringController;
+
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/controllers/FunctionController',[
+    'dat/controllers/Controller',
+    'dat/dom/dom',
+    'dat/utils/common'
+], function(Controller, dom, common) {
 
   /**
    * @class Provides a GUI interface to fire a specified method, a property of an object.
@@ -40019,12 +40730,25 @@ dat.controllers.FunctionController = (function (Controller, dom, common) {
 
   return FunctionController;
 
-})(dat.controllers.Controller,
-dat.dom.dom,
-dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
-
-dat.controllers.BooleanController = (function (Controller, dom, common) {
+define('dat/controllers/BooleanController',[
+  'dat/controllers/Controller',
+  'dat/dom/dom',
+  'dat/utils/common'
+], function(Controller, dom, common) {
 
   /**
    * @class Provides a checkbox input to alter the boolean property of an object.
@@ -40097,12 +40821,88 @@ dat.controllers.BooleanController = (function (Controller, dom, common) {
 
   return BooleanController;
 
-})(dat.controllers.Controller,
-dat.dom.dom,
-dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
+define('dat/controllers/factory',[
+  'dat/controllers/OptionController',
+  'dat/controllers/NumberControllerBox',
+  'dat/controllers/NumberControllerSlider',
+  'dat/controllers/StringController',
+  'dat/controllers/FunctionController',
+  'dat/controllers/BooleanController',
+  'dat/utils/common'
+],
+    function(OptionController, NumberControllerBox, NumberControllerSlider, StringController, FunctionController, BooleanController, common) {
 
-dat.color.toString = (function (common) {
+      return function(object, property) {
+
+        var initialValue = object[property];
+
+        // Providing options?
+        if (common.isArray(arguments[2]) || common.isObject(arguments[2])) {
+          return new OptionController(object, property, arguments[2]);
+        }
+
+        // Providing a map?
+
+        if (common.isNumber(initialValue)) {
+
+          if (common.isNumber(arguments[2]) && common.isNumber(arguments[3])) {
+
+            // Has min and max.
+            return new NumberControllerSlider(object, property, arguments[2], arguments[3]);
+
+          } else {
+
+            return new NumberControllerBox(object, property, { min: arguments[2], max: arguments[3] });
+
+          }
+
+        }
+
+        if (common.isString(initialValue)) {
+          return new StringController(object, property);
+        }
+
+        if (common.isFunction(initialValue)) {
+          return new FunctionController(object, property, '');
+        }
+
+        if (common.isBoolean(initialValue)) {
+          return new BooleanController(object, property);
+        }
+
+      }
+
+    });
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/color/toString',[
+  'dat/utils/common'
+], function(common) {
 
   return function(color) {
 
@@ -40123,10 +40923,24 @@ dat.color.toString = (function (common) {
 
   }
 
-})(dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
 
-
-dat.color.interpret = (function (toString, common) {
+define('dat/color/interpret',[
+  'dat/color/toString',
+  'dat/utils/common'
+], function(toString, common) {
 
   var result, toReturn;
 
@@ -40449,11 +41263,806 @@ dat.color.interpret = (function (toString, common) {
   return interpret;
 
 
-})(dat.color.toString,
-dat.utils.common);
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/color/math',[
+
+], function() {
+
+  var tmpComponent;
+
+  return {
+
+    hsv_to_rgb: function(h, s, v) {
+
+      var hi = Math.floor(h / 60) % 6;
+
+      var f = h / 60 - Math.floor(h / 60);
+      var p = v * (1.0 - s);
+      var q = v * (1.0 - (f * s));
+      var t = v * (1.0 - ((1.0 - f) * s));
+      var c = [
+        [v, t, p],
+        [q, v, p],
+        [p, v, t],
+        [p, q, v],
+        [t, p, v],
+        [v, p, q]
+      ][hi];
+
+      return {
+        r: c[0] * 255,
+        g: c[1] * 255,
+        b: c[2] * 255
+      };
+
+    },
+
+    rgb_to_hsv: function(r, g, b) {
+
+      var min = Math.min(r, g, b),
+          max = Math.max(r, g, b),
+          delta = max - min,
+          h, s;
+
+      if (max != 0) {
+        s = delta / max;
+      } else {
+        return {
+          h: NaN,
+          s: 0,
+          v: 0
+        };
+      }
+
+      if (r == max) {
+        h = (g - b) / delta;
+      } else if (g == max) {
+        h = 2 + (b - r) / delta;
+      } else {
+        h = 4 + (r - g) / delta;
+      }
+      h /= 6;
+      if (h < 0) {
+        h += 1;
+      }
+
+      return {
+        h: h * 360,
+        s: s,
+        v: max / 255
+      };
+    },
+
+    rgb_to_hex: function(r, g, b) {
+      var hex = this.hex_with_component(0, 2, r);
+      hex = this.hex_with_component(hex, 1, g);
+      hex = this.hex_with_component(hex, 0, b);
+      return hex;
+    },
+
+    component_from_hex: function(hex, componentIndex) {
+      return (hex >> (componentIndex * 8)) & 0xFF;
+    },
+
+    hex_with_component: function(hex, componentIndex, value) {
+      return value << (tmpComponent = componentIndex * 8) | (hex & ~ (0xFF << tmpComponent));
+    }
+
+  }
+
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/color/Color',[
+  'dat/color/interpret',
+  'dat/color/math',
+  'dat/color/toString',
+  'dat/utils/common'
+], function(interpret, math, toString, common) {
+
+  var Color = function() {
+
+    this.__state = interpret.apply(this, arguments);
+
+    if (this.__state === false) {
+      throw 'Failed to interpret color arguments';
+    }
+
+    this.__state.a = this.__state.a || 1;
 
 
-dat.GUI = dat.gui.GUI = (function (css, saveDialogueContents, styleSheet, controllerFactory, Controller, BooleanController, FunctionController, NumberControllerBox, NumberControllerSlider, OptionController, ColorController, requestAnimationFrame, CenteredDiv, dom, common) {
+  };
+
+  Color.COMPONENTS = ['r','g','b','h','s','v','hex','a'];
+
+  common.extend(Color.prototype, {
+
+    toString: function() {
+      return toString(this);
+    },
+
+    toOriginal: function() {
+      return this.__state.conversion.write(this);
+    }
+
+  });
+
+  defineRGBComponent(Color.prototype, 'r', 2);
+  defineRGBComponent(Color.prototype, 'g', 1);
+  defineRGBComponent(Color.prototype, 'b', 0);
+
+  defineHSVComponent(Color.prototype, 'h');
+  defineHSVComponent(Color.prototype, 's');
+  defineHSVComponent(Color.prototype, 'v');
+
+  Object.defineProperty(Color.prototype, 'a', {
+
+    get: function() {
+      return this.__state.a;
+    },
+
+    set: function(v) {
+      this.__state.a = v;
+    }
+
+  });
+
+  Object.defineProperty(Color.prototype, 'hex', {
+
+    get: function() {
+
+      if (!this.__state.space !== 'HEX') {
+        this.__state.hex = math.rgb_to_hex(this.r, this.g, this.b);
+      }
+
+      return this.__state.hex;
+
+    },
+
+    set: function(v) {
+
+      this.__state.space = 'HEX';
+      this.__state.hex = v;
+
+    }
+
+  });
+
+  function defineRGBComponent(target, component, componentHexIndex) {
+
+    Object.defineProperty(target, component, {
+
+      get: function() {
+
+        if (this.__state.space === 'RGB') {
+          return this.__state[component];
+        }
+
+        recalculateRGB(this, component, componentHexIndex);
+
+        return this.__state[component];
+
+      },
+
+      set: function(v) {
+
+        if (this.__state.space !== 'RGB') {
+          recalculateRGB(this, component, componentHexIndex);
+          this.__state.space = 'RGB';
+        }
+
+        this.__state[component] = v;
+
+      }
+
+    });
+
+  }
+
+  function defineHSVComponent(target, component) {
+
+    Object.defineProperty(target, component, {
+
+      get: function() {
+
+        if (this.__state.space === 'HSV')
+          return this.__state[component];
+
+        recalculateHSV(this);
+
+        return this.__state[component];
+
+      },
+
+      set: function(v) {
+
+        if (this.__state.space !== 'HSV') {
+          recalculateHSV(this);
+          this.__state.space = 'HSV';
+        }
+
+        this.__state[component] = v;
+
+      }
+
+    });
+
+  }
+
+  function recalculateRGB(color, component, componentHexIndex) {
+
+    if (color.__state.space === 'HEX') {
+
+      color.__state[component] = math.component_from_hex(color.__state.hex, componentHexIndex);
+
+    } else if (color.__state.space === 'HSV') {
+
+      common.extend(color.__state, math.hsv_to_rgb(color.__state.h, color.__state.s, color.__state.v));
+
+    } else {
+
+      throw 'Corrupted color state';
+
+    }
+
+  }
+
+  function recalculateHSV(color) {
+
+    var result = math.rgb_to_hsv(color.r, color.g, color.b);
+
+    common.extend(color.__state,
+        {
+          s: result.s,
+          v: result.v
+        }
+    );
+
+    if (!common.isNaN(result.h)) {
+      color.__state.h = result.h;
+    } else if (common.isUndefined(color.__state.h)) {
+      color.__state.h = 0;
+    }
+
+  }
+
+  return Color;
+
+});
+
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/controllers/ColorController',[
+  'dat/controllers/Controller',
+  'dat/dom/dom',
+  'dat/color/Color',
+  'dat/color/interpret',
+  'dat/utils/common'
+], function(Controller, dom, Color, interpret, common) {
+
+  var ColorController = function(object, property) {
+
+    ColorController.superclass.call(this, object, property);
+
+    this.__color = new Color(this.getValue());
+    this.__temp = new Color(0);
+
+    var _this = this;
+
+    this.domElement = document.createElement('div');
+
+    dom.makeSelectable(this.domElement, false);
+
+    this.__selector = document.createElement('div');
+    this.__selector.className = 'selector';
+
+    this.__saturation_field = document.createElement('div');
+    this.__saturation_field.className = 'saturation-field';
+
+    this.__field_knob = document.createElement('div');
+    this.__field_knob.className = 'field-knob';
+    this.__field_knob_border = '2px solid ';
+
+    this.__hue_knob = document.createElement('div');
+    this.__hue_knob.className = 'hue-knob';
+
+    this.__hue_field = document.createElement('div');
+    this.__hue_field.className = 'hue-field';
+
+    this.__input = document.createElement('input');
+    this.__input.type = 'text';
+    this.__input_textShadow = '0 1px 1px ';
+
+    dom.bind(this.__input, 'keydown', function(e) {
+      if (e.keyCode === 13) { // on enter
+        onBlur.call(this);
+      }
+    });
+
+    dom.bind(this.__input, 'blur', onBlur);
+
+    dom.bind(this.__selector, 'mousedown', function(e) {
+
+      dom
+        .addClass(this, 'drag')
+        .bind(window, 'mouseup', function(e) {
+          dom.removeClass(_this.__selector, 'drag');
+        });
+
+    });
+
+    var value_field = document.createElement('div');
+
+    common.extend(this.__selector.style, {
+      width: '122px',
+      height: '102px',
+      padding: '3px',
+      backgroundColor: '#222',
+      boxShadow: '0px 1px 3px rgba(0,0,0,0.3)'
+    });
+
+    common.extend(this.__field_knob.style, {
+      position: 'absolute',
+      width: '12px',
+      height: '12px',
+      border: this.__field_knob_border + (this.__color.v < .5 ? '#fff' : '#000'),
+      boxShadow: '0px 1px 3px rgba(0,0,0,0.5)',
+      borderRadius: '12px',
+      zIndex: 1
+    });
+    
+    common.extend(this.__hue_knob.style, {
+      position: 'absolute',
+      width: '15px',
+      height: '2px',
+      borderRight: '4px solid #fff',
+      zIndex: 1
+    });
+
+    common.extend(this.__saturation_field.style, {
+      width: '100px',
+      height: '100px',
+      border: '1px solid #555',
+      marginRight: '3px',
+      display: 'inline-block',
+      cursor: 'pointer'
+    });
+
+    common.extend(value_field.style, {
+      width: '100%',
+      height: '100%',
+      background: 'none'
+    });
+    
+    linearGradient(value_field, 'top', 'rgba(0,0,0,0)', '#000');
+
+    common.extend(this.__hue_field.style, {
+      width: '15px',
+      height: '100px',
+      display: 'inline-block',
+      border: '1px solid #555',
+      cursor: 'ns-resize'
+    });
+
+    hueGradient(this.__hue_field);
+
+    common.extend(this.__input.style, {
+      outline: 'none',
+//      width: '120px',
+      textAlign: 'center',
+//      padding: '4px',
+//      marginBottom: '6px',
+      color: '#fff',
+      border: 0,
+      fontWeight: 'bold',
+      textShadow: this.__input_textShadow + 'rgba(0,0,0,0.7)'
+    });
+
+    dom.bind(this.__saturation_field, 'mousedown', fieldDown);
+    dom.bind(this.__field_knob, 'mousedown', fieldDown);
+
+    dom.bind(this.__hue_field, 'mousedown', function(e) {
+      setH(e);
+      dom.bind(window, 'mousemove', setH);
+      dom.bind(window, 'mouseup', unbindH);
+    });
+
+    function fieldDown(e) {
+      setSV(e);
+      // document.body.style.cursor = 'none';
+      dom.bind(window, 'mousemove', setSV);
+      dom.bind(window, 'mouseup', unbindSV);
+    }
+
+    function unbindSV() {
+      dom.unbind(window, 'mousemove', setSV);
+      dom.unbind(window, 'mouseup', unbindSV);
+      // document.body.style.cursor = 'default';
+    }
+
+    function onBlur() {
+      var i = interpret(this.value);
+      if (i !== false) {
+        _this.__color.__state = i;
+        _this.setValue(_this.__color.toOriginal());
+      } else {
+        this.value = _this.__color.toString();
+      }
+    }
+
+    function unbindH() {
+      dom.unbind(window, 'mousemove', setH);
+      dom.unbind(window, 'mouseup', unbindH);
+    }
+
+    this.__saturation_field.appendChild(value_field);
+    this.__selector.appendChild(this.__field_knob);
+    this.__selector.appendChild(this.__saturation_field);
+    this.__selector.appendChild(this.__hue_field);
+    this.__hue_field.appendChild(this.__hue_knob);
+
+    this.domElement.appendChild(this.__input);
+    this.domElement.appendChild(this.__selector);
+
+    this.updateDisplay();
+
+    function setSV(e) {
+
+      e.preventDefault();
+
+      var w = dom.getWidth(_this.__saturation_field);
+      var o = dom.getOffset(_this.__saturation_field);
+      var s = (e.clientX - o.left + document.body.scrollLeft) / w;
+      var v = 1 - (e.clientY - o.top + document.body.scrollTop) / w;
+
+      if (v > 1) v = 1;
+      else if (v < 0) v = 0;
+
+      if (s > 1) s = 1;
+      else if (s < 0) s = 0;
+
+      _this.__color.v = v;
+      _this.__color.s = s;
+
+      _this.setValue(_this.__color.toOriginal());
+
+
+      return false;
+
+    }
+
+    function setH(e) {
+
+      e.preventDefault();
+
+      var s = dom.getHeight(_this.__hue_field);
+      var o = dom.getOffset(_this.__hue_field);
+      var h = 1 - (e.clientY - o.top + document.body.scrollTop) / s;
+
+      if (h > 1) h = 1;
+      else if (h < 0) h = 0;
+
+      _this.__color.h = h * 360;
+
+      _this.setValue(_this.__color.toOriginal());
+
+      return false;
+
+    }
+
+  };
+
+  ColorController.superclass = Controller;
+
+  common.extend(
+
+      ColorController.prototype,
+      Controller.prototype,
+
+      {
+
+        updateDisplay: function() {
+
+          var i = interpret(this.getValue());
+
+          if (i !== false) {
+
+            var mismatch = false;
+
+            // Check for mismatch on the interpreted value.
+
+            common.each(Color.COMPONENTS, function(component) {
+              if (!common.isUndefined(i[component]) &&
+                  !common.isUndefined(this.__color.__state[component]) &&
+                  i[component] !== this.__color.__state[component]) {
+                mismatch = true;
+                return {}; // break
+              }
+            }, this);
+
+            // If nothing diverges, we keep our previous values
+            // for statefulness, otherwise we recalculate fresh
+            if (mismatch) {
+              common.extend(this.__color.__state, i);
+            }
+
+          }
+
+          common.extend(this.__temp.__state, this.__color.__state);
+
+          this.__temp.a = 1;
+
+          var flip = (this.__color.v < .5 || this.__color.s > .5) ? 255 : 0;
+          var _flip = 255 - flip;
+
+          common.extend(this.__field_knob.style, {
+            marginLeft: 100 * this.__color.s - 7 + 'px',
+            marginTop: 100 * (1 - this.__color.v) - 7 + 'px',
+            backgroundColor: this.__temp.toString(),
+            border: this.__field_knob_border + 'rgb(' + flip + ',' + flip + ',' + flip +')'
+          });
+
+          this.__hue_knob.style.marginTop = (1 - this.__color.h / 360) * 100 + 'px'
+
+          this.__temp.s = 1;
+          this.__temp.v = 1;
+
+          linearGradient(this.__saturation_field, 'left', '#fff', this.__temp.toString());
+
+          common.extend(this.__input.style, {
+            backgroundColor: this.__input.value = this.__color.toString(),
+            color: 'rgb(' + flip + ',' + flip + ',' + flip +')',
+            textShadow: this.__input_textShadow + 'rgba(' + _flip + ',' + _flip + ',' + _flip +',.7)'
+          });
+
+        }
+
+      }
+
+  );
+  
+  var vendors = ['-moz-','-o-','-webkit-','-ms-',''];
+  
+  function linearGradient(elem, x, a, b) {
+    elem.style.background = '';
+    common.each(vendors, function(vendor) {
+      elem.style.cssText += 'background: ' + vendor + 'linear-gradient('+x+', '+a+' 0%, ' + b + ' 100%); ';
+    });
+  }
+  
+  function hueGradient(elem) {
+    elem.style.background = '';
+    elem.style.cssText += 'background: -moz-linear-gradient(top,  #ff0000 0%, #ff00ff 17%, #0000ff 34%, #00ffff 50%, #00ff00 67%, #ffff00 84%, #ff0000 100%);'
+    elem.style.cssText += 'background: -webkit-linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
+    elem.style.cssText += 'background: -o-linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
+    elem.style.cssText += 'background: -ms-linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
+    elem.style.cssText += 'background: linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
+  }
+
+
+  return ColorController;
+
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/utils/requestAnimationFrame',[
+], function() {
+
+  /**
+   * requirejs version of Paul Irish's RequestAnimationFrame
+   * http://paulirish.com/2011/requestanimationframe-for-smart-animating/
+   */
+
+  return window.webkitRequestAnimationFrame ||
+      window.mozRequestAnimationFrame ||
+      window.oRequestAnimationFrame ||
+      window.msRequestAnimationFrame ||
+      function(callback, element) {
+
+        window.setTimeout(callback, 1000 / 60);
+
+      };
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/dom/CenteredDiv',[
+  'dat/dom/dom',
+  'dat/utils/common'
+], function(dom, common) {
+
+
+  var CenteredDiv = function() {
+
+    this.backgroundElement = document.createElement('div');
+    common.extend(this.backgroundElement.style, {
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      top: 0,
+      left: 0,
+      display: 'none',
+      zIndex: '1000',
+      opacity: 0,
+      WebkitTransition: 'opacity 0.2s linear'
+    });
+
+    dom.makeFullscreen(this.backgroundElement);
+    this.backgroundElement.style.position = 'fixed';
+
+    this.domElement = document.createElement('div');
+    common.extend(this.domElement.style, {
+      position: 'fixed',
+      display: 'none',
+      zIndex: '1001',
+      opacity: 0,
+      WebkitTransition: '-webkit-transform 0.2s ease-out, opacity 0.2s linear'
+    });
+
+
+    document.body.appendChild(this.backgroundElement);
+    document.body.appendChild(this.domElement);
+
+    var _this = this;
+    dom.bind(this.backgroundElement, 'click', function() {
+      _this.hide();
+    });
+
+
+  };
+
+  CenteredDiv.prototype.show = function() {
+
+    var _this = this;
+    
+
+
+    this.backgroundElement.style.display = 'block';
+
+    this.domElement.style.display = 'block';
+    this.domElement.style.opacity = 0;
+//    this.domElement.style.top = '52%';
+    this.domElement.style.webkitTransform = 'scale(1.1)';
+
+    this.layout();
+
+    common.defer(function() {
+      _this.backgroundElement.style.opacity = 1;
+      _this.domElement.style.opacity = 1;
+      _this.domElement.style.webkitTransform = 'scale(1)';
+    });
+
+  };
+
+  CenteredDiv.prototype.hide = function() {
+
+    var _this = this;
+
+    var hide = function() {
+
+      _this.domElement.style.display = 'none';
+      _this.backgroundElement.style.display = 'none';
+
+      dom.unbind(_this.domElement, 'webkitTransitionEnd', hide);
+      dom.unbind(_this.domElement, 'transitionend', hide);
+      dom.unbind(_this.domElement, 'oTransitionEnd', hide);
+
+    };
+
+    dom.bind(this.domElement, 'webkitTransitionEnd', hide);
+    dom.bind(this.domElement, 'transitionend', hide);
+    dom.bind(this.domElement, 'oTransitionEnd', hide);
+
+    this.backgroundElement.style.opacity = 0;
+//    this.domElement.style.top = '48%';
+    this.domElement.style.opacity = 0;
+    this.domElement.style.webkitTransform = 'scale(1.1)';
+
+  };
+
+  CenteredDiv.prototype.layout = function() {
+    this.domElement.style.left = window.innerWidth/2 - dom.getWidth(this.domElement) / 2 + 'px';
+    this.domElement.style.top = window.innerHeight/2 - dom.getHeight(this.domElement) / 2 + 'px';
+  };
+  
+  function lockScroll(e) {
+    console.log(e);
+  }
+
+  return CenteredDiv;
+
+});
+/**
+ * dat-gui JavaScript Controller Library
+ * http://code.google.com/p/dat-gui
+ *
+ * Copyright 2011 Data Arts Team, Google Creative Lab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+define('dat/gui/GUI',[
+
+  'dat/utils/css',
+
+  'text!dat/gui/saveDialogue.html',
+  'text!dat/gui/style.css',
+
+  'dat/controllers/factory',
+  'dat/controllers/Controller',
+  'dat/controllers/BooleanController',
+  'dat/controllers/FunctionController',
+  'dat/controllers/NumberControllerBox',
+  'dat/controllers/NumberControllerSlider',
+  'dat/controllers/OptionController',
+  'dat/controllers/ColorController',
+
+  'dat/utils/requestAnimationFrame',
+
+  'dat/dom/CenteredDiv',
+  'dat/dom/dom',
+
+  'dat/utils/common'
+
+], function(css, saveDialogueContents, styleSheet, controllerFactory, Controller, BooleanController, FunctionController, NumberControllerBox, NumberControllerSlider, OptionController, ColorController, requestAnimationFrame, CenteredDiv, dom, common) {
 
   css.inject(styleSheet);
 
@@ -41767,831 +43376,11 @@ dat.GUI = dat.gui.GUI = (function (css, saveDialogueContents, styleSheet, contro
 
   return GUI;
 
-})(dat.utils.css,
-"<div id=\"dg-save\" class=\"dg dialogue\">\n\n  Here's the new load parameter for your <code>GUI</code>'s constructor:\n\n  <textarea id=\"dg-new-constructor\"></textarea>\n\n  <div id=\"dg-save-locally\">\n\n    <input id=\"dg-local-storage\" type=\"checkbox\"/> Automatically save\n    values to <code>localStorage</code> on exit.\n\n    <div id=\"dg-local-explain\">The values saved to <code>localStorage</code> will\n      override those passed to <code>dat.GUI</code>'s constructor. This makes it\n      easier to work incrementally, but <code>localStorage</code> is fragile,\n      and your friends may not see the same values you do.\n      \n    </div>\n    \n  </div>\n\n</div>",
-".dg {\n  /** Clear list styles */\n  /* Auto-place container */\n  /* Auto-placed GUI's */\n  /* Line items that don't contain folders. */\n  /** Folder names */\n  /** Hides closed items */\n  /** Controller row */\n  /** Name-half (left) */\n  /** Controller-half (right) */\n  /** Controller placement */\n  /** Shorter number boxes when slider is present. */\n  /** Ensure the entire boolean and function row shows a hand */ }\n  .dg ul {\n    list-style: none;\n    margin: 0;\n    padding: 0;\n    width: 100%;\n    clear: both; }\n  .dg.ac {\n    position: fixed;\n    top: 0;\n    left: 0;\n    right: 0;\n    height: 0;\n    z-index: 0; }\n  .dg:not(.ac) .main {\n    /** Exclude mains in ac so that we don't hide close button */\n    overflow: hidden; }\n  .dg.main {\n    -webkit-transition: opacity 0.1s linear;\n    -o-transition: opacity 0.1s linear;\n    -moz-transition: opacity 0.1s linear;\n    transition: opacity 0.1s linear; }\n    .dg.main.taller-than-window {\n      overflow-y: auto; }\n      .dg.main.taller-than-window .close-button {\n        opacity: 1;\n        /* TODO, these are style notes */\n        margin-top: -1px;\n        border-top: 1px solid #2c2c2c; }\n    .dg.main ul.closed .close-button {\n      opacity: 1 !important; }\n    .dg.main:hover .close-button,\n    .dg.main .close-button.drag {\n      opacity: 1; }\n    .dg.main .close-button {\n      /*opacity: 0;*/\n      -webkit-transition: opacity 0.1s linear;\n      -o-transition: opacity 0.1s linear;\n      -moz-transition: opacity 0.1s linear;\n      transition: opacity 0.1s linear;\n      border: 0;\n      position: absolute;\n      line-height: 19px;\n      height: 20px;\n      /* TODO, these are style notes */\n      cursor: pointer;\n      text-align: center;\n      background-color: #000; }\n      .dg.main .close-button:hover {\n        background-color: #111; }\n  .dg.a {\n    float: right;\n    margin-right: 15px;\n    overflow-x: hidden; }\n    .dg.a.has-save > ul {\n      margin-top: 27px; }\n      .dg.a.has-save > ul.closed {\n        margin-top: 0; }\n    .dg.a .save-row {\n      position: fixed;\n      top: 0;\n      z-index: 1002; }\n  .dg li {\n    -webkit-transition: height 0.1s ease-out;\n    -o-transition: height 0.1s ease-out;\n    -moz-transition: height 0.1s ease-out;\n    transition: height 0.1s ease-out; }\n  .dg li:not(.folder) {\n    cursor: auto;\n    height: 27px;\n    line-height: 27px;\n    overflow: hidden;\n    padding: 0 4px 0 5px; }\n  .dg li.folder {\n    padding: 0;\n    border-left: 4px solid rgba(0, 0, 0, 0); }\n  .dg li.title {\n    cursor: pointer;\n    margin-left: -4px; }\n  .dg .closed li:not(.title),\n  .dg .closed ul li,\n  .dg .closed ul li > * {\n    height: 0;\n    overflow: hidden;\n    border: 0; }\n  .dg .cr {\n    clear: both;\n    padding-left: 3px;\n    height: 27px; }\n  .dg .property-name {\n    cursor: default;\n    float: left;\n    clear: left;\n    width: 40%;\n    overflow: hidden;\n    text-overflow: ellipsis; }\n  .dg .c {\n    float: left;\n    width: 60%; }\n  .dg .c input[type=text] {\n    border: 0;\n    margin-top: 4px;\n    padding: 3px;\n    width: 100%;\n    float: right; }\n  .dg .has-slider input[type=text] {\n    width: 30%;\n    /*display: none;*/\n    margin-left: 0; }\n  .dg .slider {\n    float: left;\n    width: 66%;\n    margin-left: -5px;\n    margin-right: 0;\n    height: 19px;\n    margin-top: 4px; }\n  .dg .slider-fg {\n    height: 100%; }\n  .dg .c input[type=checkbox] {\n    margin-top: 9px; }\n  .dg .c select {\n    margin-top: 5px; }\n  .dg .cr.function,\n  .dg .cr.function .property-name,\n  .dg .cr.function *,\n  .dg .cr.boolean,\n  .dg .cr.boolean * {\n    cursor: pointer; }\n  .dg .selector {\n    display: none;\n    position: absolute;\n    margin-left: -9px;\n    margin-top: 23px;\n    z-index: 10; }\n  .dg .c:hover .selector,\n  .dg .selector.drag {\n    display: block; }\n  .dg li.save-row {\n    padding: 0; }\n    .dg li.save-row .button {\n      display: inline-block;\n      padding: 0px 6px; }\n  .dg.dialogue {\n    background-color: #222;\n    width: 460px;\n    padding: 15px;\n    font-size: 13px;\n    line-height: 15px; }\n\n/* TODO Separate style and structure */\n#dg-new-constructor {\n  padding: 10px;\n  color: #222;\n  font-family: Monaco, monospace;\n  font-size: 10px;\n  border: 0;\n  resize: none;\n  box-shadow: inset 1px 1px 1px #888;\n  word-wrap: break-word;\n  margin: 12px 0;\n  display: block;\n  width: 440px;\n  overflow-y: scroll;\n  height: 100px;\n  position: relative; }\n\n#dg-local-explain {\n  display: none;\n  font-size: 11px;\n  line-height: 17px;\n  border-radius: 3px;\n  background-color: #333;\n  padding: 8px;\n  margin-top: 10px; }\n  #dg-local-explain code {\n    font-size: 10px; }\n\n#dat-gui-save-locally {\n  display: none; }\n\n/** Main type */\n.dg {\n  color: #eee;\n  font: 11px 'Lucida Grande', sans-serif;\n  text-shadow: 0 -1px 0 #111;\n  /** Auto place */\n  /* Controller row, <li> */\n  /** Controllers */ }\n  .dg.main {\n    /** Scrollbar */ }\n    .dg.main::-webkit-scrollbar {\n      width: 5px;\n      background: #1a1a1a; }\n    .dg.main::-webkit-scrollbar-corner {\n      height: 0;\n      display: none; }\n    .dg.main::-webkit-scrollbar-thumb {\n      border-radius: 5px;\n      background: #676767; }\n  .dg li:not(.folder) {\n    background: #1a1a1a;\n    border-bottom: 1px solid #2c2c2c; }\n  .dg li.save-row {\n    line-height: 25px;\n    background: #dad5cb;\n    border: 0; }\n    .dg li.save-row select {\n      margin-left: 5px;\n      width: 108px; }\n    .dg li.save-row .button {\n      margin-left: 5px;\n      margin-top: 1px;\n      border-radius: 2px;\n      font-size: 9px;\n      line-height: 7px;\n      padding: 4px 4px 5px 4px;\n      background: #c5bdad;\n      color: #fff;\n      text-shadow: 0 1px 0 #b0a58f;\n      box-shadow: 0 -1px 0 #b0a58f;\n      cursor: pointer; }\n      .dg li.save-row .button.gears {\n        background: #c5bdad url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAsAAAANCAYAAAB/9ZQ7AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAQJJREFUeNpiYKAU/P//PwGIC/ApCABiBSAW+I8AClAcgKxQ4T9hoMAEUrxx2QSGN6+egDX+/vWT4e7N82AMYoPAx/evwWoYoSYbACX2s7KxCxzcsezDh3evFoDEBYTEEqycggWAzA9AuUSQQgeYPa9fPv6/YWm/Acx5IPb7ty/fw+QZblw67vDs8R0YHyQhgObx+yAJkBqmG5dPPDh1aPOGR/eugW0G4vlIoTIfyFcA+QekhhHJhPdQxbiAIguMBTQZrPD7108M6roWYDFQiIAAv6Aow/1bFwXgis+f2LUAynwoIaNcz8XNx3Dl7MEJUDGQpx9gtQ8YCueB+D26OECAAQDadt7e46D42QAAAABJRU5ErkJggg==) 2px 1px no-repeat;\n        height: 7px;\n        width: 8px; }\n      .dg li.save-row .button:hover {\n        background-color: #bab19e;\n        box-shadow: 0 -1px 0 #b0a58f; }\n  .dg li.folder {\n    border-bottom: 0; }\n  .dg li.title {\n    padding-left: 16px;\n    background: black url(data:image/gif;base64,R0lGODlhBQAFAJEAAP////Pz8////////yH5BAEAAAIALAAAAAAFAAUAAAIIlI+hKgFxoCgAOw==) 6px 10px no-repeat;\n    cursor: pointer;\n    border-bottom: 1px solid rgba(255, 255, 255, 0.2); }\n  .dg .closed li.title {\n    background-image: url(data:image/gif;base64,R0lGODlhBQAFAJEAAP////Pz8////////yH5BAEAAAIALAAAAAAFAAUAAAIIlGIWqMCbWAEAOw==); }\n  .dg .cr.boolean {\n    border-left: 3px solid #806787; }\n  .dg .cr.function {\n    border-left: 3px solid #e61d5f; }\n  .dg .cr.number {\n    border-left: 3px solid #2fa1d6; }\n    .dg .cr.number input[type=text] {\n      color: #2fa1d6; }\n  .dg .cr.string {\n    border-left: 3px solid #1ed36f; }\n    .dg .cr.string input[type=text] {\n      color: #1ed36f; }\n  .dg .cr.function:hover, .dg .cr.boolean:hover {\n    background: #111; }\n  .dg .c input[type=text] {\n    background: #303030;\n    outline: none; }\n    .dg .c input[type=text]:hover {\n      background: #3c3c3c; }\n    .dg .c input[type=text]:focus {\n      background: #494949;\n      color: #fff; }\n  .dg .c .slider {\n    background: #303030;\n    cursor: ew-resize; }\n  .dg .c .slider-fg {\n    background: #2fa1d6; }\n  .dg .c .slider:hover {\n    background: #3c3c3c; }\n    .dg .c .slider:hover .slider-fg {\n      background: #44abda; }\n",
-dat.controllers.factory = (function (OptionController, NumberControllerBox, NumberControllerSlider, StringController, FunctionController, BooleanController, common) {
-
-      return function(object, property) {
-
-        var initialValue = object[property];
-
-        // Providing options?
-        if (common.isArray(arguments[2]) || common.isObject(arguments[2])) {
-          return new OptionController(object, property, arguments[2]);
-        }
-
-        // Providing a map?
-
-        if (common.isNumber(initialValue)) {
-
-          if (common.isNumber(arguments[2]) && common.isNumber(arguments[3])) {
-
-            // Has min and max.
-            return new NumberControllerSlider(object, property, arguments[2], arguments[3]);
-
-          } else {
-
-            return new NumberControllerBox(object, property, { min: arguments[2], max: arguments[3] });
-
-          }
-
-        }
-
-        if (common.isString(initialValue)) {
-          return new StringController(object, property);
-        }
-
-        if (common.isFunction(initialValue)) {
-          return new FunctionController(object, property, '');
-        }
-
-        if (common.isBoolean(initialValue)) {
-          return new BooleanController(object, property);
-        }
-
-      }
-
-    })(dat.controllers.OptionController,
-dat.controllers.NumberControllerBox,
-dat.controllers.NumberControllerSlider,
-dat.controllers.StringController = (function (Controller, dom, common) {
-
-  /**
-   * @class Provides a text input to alter the string property of an object.
-   *
-   * @extends dat.controllers.Controller
-   *
-   * @param {Object} object The object to be manipulated
-   * @param {string} property The name of the property to be manipulated
-   *
-   * @member dat.controllers
-   */
-  var StringController = function(object, property) {
-
-    StringController.superclass.call(this, object, property);
-
-    var _this = this;
-
-    this.__input = document.createElement('input');
-    this.__input.setAttribute('type', 'text');
-
-    dom.bind(this.__input, 'keyup', onChange);
-    dom.bind(this.__input, 'change', onChange);
-    dom.bind(this.__input, 'blur', onBlur);
-    dom.bind(this.__input, 'keydown', function(e) {
-      if (e.keyCode === 13) {
-        this.blur();
-      }
-    });
-    
-
-    function onChange() {
-      _this.setValue(_this.__input.value);
-    }
-
-    function onBlur() {
-      if (_this.__onFinishChange) {
-        _this.__onFinishChange.call(_this, _this.getValue());
-      }
-    }
-
-    this.updateDisplay();
-
-    this.domElement.appendChild(this.__input);
-
-  };
-
-  StringController.superclass = Controller;
-
-  common.extend(
-
-      StringController.prototype,
-      Controller.prototype,
-
-      {
-
-        updateDisplay: function() {
-          // Stops the caret from moving on account of:
-          // keyup -> setValue -> updateDisplay
-          if (!dom.isActive(this.__input)) {
-            this.__input.value = this.getValue();
-          }
-          return StringController.superclass.prototype.updateDisplay.call(this);
-        }
-
-      }
-
-  );
-
-  return StringController;
-
-})(dat.controllers.Controller,
-dat.dom.dom,
-dat.utils.common),
-dat.controllers.FunctionController,
-dat.controllers.BooleanController,
-dat.utils.common),
-dat.controllers.Controller,
-dat.controllers.BooleanController,
-dat.controllers.FunctionController,
-dat.controllers.NumberControllerBox,
-dat.controllers.NumberControllerSlider,
-dat.controllers.OptionController,
-dat.controllers.ColorController = (function (Controller, dom, Color, interpret, common) {
-
-  var ColorController = function(object, property) {
-
-    ColorController.superclass.call(this, object, property);
-
-    this.__color = new Color(this.getValue());
-    this.__temp = new Color(0);
-
-    var _this = this;
-
-    this.domElement = document.createElement('div');
-
-    dom.makeSelectable(this.domElement, false);
-
-    this.__selector = document.createElement('div');
-    this.__selector.className = 'selector';
-
-    this.__saturation_field = document.createElement('div');
-    this.__saturation_field.className = 'saturation-field';
-
-    this.__field_knob = document.createElement('div');
-    this.__field_knob.className = 'field-knob';
-    this.__field_knob_border = '2px solid ';
-
-    this.__hue_knob = document.createElement('div');
-    this.__hue_knob.className = 'hue-knob';
-
-    this.__hue_field = document.createElement('div');
-    this.__hue_field.className = 'hue-field';
-
-    this.__input = document.createElement('input');
-    this.__input.type = 'text';
-    this.__input_textShadow = '0 1px 1px ';
-
-    dom.bind(this.__input, 'keydown', function(e) {
-      if (e.keyCode === 13) { // on enter
-        onBlur.call(this);
-      }
-    });
-
-    dom.bind(this.__input, 'blur', onBlur);
-
-    dom.bind(this.__selector, 'mousedown', function(e) {
-
-      dom
-        .addClass(this, 'drag')
-        .bind(window, 'mouseup', function(e) {
-          dom.removeClass(_this.__selector, 'drag');
-        });
-
-    });
-
-    var value_field = document.createElement('div');
-
-    common.extend(this.__selector.style, {
-      width: '122px',
-      height: '102px',
-      padding: '3px',
-      backgroundColor: '#222',
-      boxShadow: '0px 1px 3px rgba(0,0,0,0.3)'
-    });
-
-    common.extend(this.__field_knob.style, {
-      position: 'absolute',
-      width: '12px',
-      height: '12px',
-      border: this.__field_knob_border + (this.__color.v < .5 ? '#fff' : '#000'),
-      boxShadow: '0px 1px 3px rgba(0,0,0,0.5)',
-      borderRadius: '12px',
-      zIndex: 1
-    });
-    
-    common.extend(this.__hue_knob.style, {
-      position: 'absolute',
-      width: '15px',
-      height: '2px',
-      borderRight: '4px solid #fff',
-      zIndex: 1
-    });
-
-    common.extend(this.__saturation_field.style, {
-      width: '100px',
-      height: '100px',
-      border: '1px solid #555',
-      marginRight: '3px',
-      display: 'inline-block',
-      cursor: 'pointer'
-    });
-
-    common.extend(value_field.style, {
-      width: '100%',
-      height: '100%',
-      background: 'none'
-    });
-    
-    linearGradient(value_field, 'top', 'rgba(0,0,0,0)', '#000');
-
-    common.extend(this.__hue_field.style, {
-      width: '15px',
-      height: '100px',
-      display: 'inline-block',
-      border: '1px solid #555',
-      cursor: 'ns-resize'
-    });
-
-    hueGradient(this.__hue_field);
-
-    common.extend(this.__input.style, {
-      outline: 'none',
-//      width: '120px',
-      textAlign: 'center',
-//      padding: '4px',
-//      marginBottom: '6px',
-      color: '#fff',
-      border: 0,
-      fontWeight: 'bold',
-      textShadow: this.__input_textShadow + 'rgba(0,0,0,0.7)'
-    });
-
-    dom.bind(this.__saturation_field, 'mousedown', fieldDown);
-    dom.bind(this.__field_knob, 'mousedown', fieldDown);
-
-    dom.bind(this.__hue_field, 'mousedown', function(e) {
-      setH(e);
-      dom.bind(window, 'mousemove', setH);
-      dom.bind(window, 'mouseup', unbindH);
-    });
-
-    function fieldDown(e) {
-      setSV(e);
-      // document.body.style.cursor = 'none';
-      dom.bind(window, 'mousemove', setSV);
-      dom.bind(window, 'mouseup', unbindSV);
-    }
-
-    function unbindSV() {
-      dom.unbind(window, 'mousemove', setSV);
-      dom.unbind(window, 'mouseup', unbindSV);
-      // document.body.style.cursor = 'default';
-    }
-
-    function onBlur() {
-      var i = interpret(this.value);
-      if (i !== false) {
-        _this.__color.__state = i;
-        _this.setValue(_this.__color.toOriginal());
-      } else {
-        this.value = _this.__color.toString();
-      }
-    }
-
-    function unbindH() {
-      dom.unbind(window, 'mousemove', setH);
-      dom.unbind(window, 'mouseup', unbindH);
-    }
-
-    this.__saturation_field.appendChild(value_field);
-    this.__selector.appendChild(this.__field_knob);
-    this.__selector.appendChild(this.__saturation_field);
-    this.__selector.appendChild(this.__hue_field);
-    this.__hue_field.appendChild(this.__hue_knob);
-
-    this.domElement.appendChild(this.__input);
-    this.domElement.appendChild(this.__selector);
-
-    this.updateDisplay();
-
-    function setSV(e) {
-
-      e.preventDefault();
-
-      var w = dom.getWidth(_this.__saturation_field);
-      var o = dom.getOffset(_this.__saturation_field);
-      var s = (e.clientX - o.left + document.body.scrollLeft) / w;
-      var v = 1 - (e.clientY - o.top + document.body.scrollTop) / w;
-
-      if (v > 1) v = 1;
-      else if (v < 0) v = 0;
-
-      if (s > 1) s = 1;
-      else if (s < 0) s = 0;
-
-      _this.__color.v = v;
-      _this.__color.s = s;
-
-      _this.setValue(_this.__color.toOriginal());
-
-
-      return false;
-
-    }
-
-    function setH(e) {
-
-      e.preventDefault();
-
-      var s = dom.getHeight(_this.__hue_field);
-      var o = dom.getOffset(_this.__hue_field);
-      var h = 1 - (e.clientY - o.top + document.body.scrollTop) / s;
-
-      if (h > 1) h = 1;
-      else if (h < 0) h = 0;
-
-      _this.__color.h = h * 360;
-
-      _this.setValue(_this.__color.toOriginal());
-
-      return false;
-
-    }
-
-  };
-
-  ColorController.superclass = Controller;
-
-  common.extend(
-
-      ColorController.prototype,
-      Controller.prototype,
-
-      {
-
-        updateDisplay: function() {
-
-          var i = interpret(this.getValue());
-
-          if (i !== false) {
-
-            var mismatch = false;
-
-            // Check for mismatch on the interpreted value.
-
-            common.each(Color.COMPONENTS, function(component) {
-              if (!common.isUndefined(i[component]) &&
-                  !common.isUndefined(this.__color.__state[component]) &&
-                  i[component] !== this.__color.__state[component]) {
-                mismatch = true;
-                return {}; // break
-              }
-            }, this);
-
-            // If nothing diverges, we keep our previous values
-            // for statefulness, otherwise we recalculate fresh
-            if (mismatch) {
-              common.extend(this.__color.__state, i);
-            }
-
-          }
-
-          common.extend(this.__temp.__state, this.__color.__state);
-
-          this.__temp.a = 1;
-
-          var flip = (this.__color.v < .5 || this.__color.s > .5) ? 255 : 0;
-          var _flip = 255 - flip;
-
-          common.extend(this.__field_knob.style, {
-            marginLeft: 100 * this.__color.s - 7 + 'px',
-            marginTop: 100 * (1 - this.__color.v) - 7 + 'px',
-            backgroundColor: this.__temp.toString(),
-            border: this.__field_knob_border + 'rgb(' + flip + ',' + flip + ',' + flip +')'
-          });
-
-          this.__hue_knob.style.marginTop = (1 - this.__color.h / 360) * 100 + 'px'
-
-          this.__temp.s = 1;
-          this.__temp.v = 1;
-
-          linearGradient(this.__saturation_field, 'left', '#fff', this.__temp.toString());
-
-          common.extend(this.__input.style, {
-            backgroundColor: this.__input.value = this.__color.toString(),
-            color: 'rgb(' + flip + ',' + flip + ',' + flip +')',
-            textShadow: this.__input_textShadow + 'rgba(' + _flip + ',' + _flip + ',' + _flip +',.7)'
-          });
-
-        }
-
-      }
-
-  );
-  
-  var vendors = ['-moz-','-o-','-webkit-','-ms-',''];
-  
-  function linearGradient(elem, x, a, b) {
-    elem.style.background = '';
-    common.each(vendors, function(vendor) {
-      elem.style.cssText += 'background: ' + vendor + 'linear-gradient('+x+', '+a+' 0%, ' + b + ' 100%); ';
-    });
-  }
-  
-  function hueGradient(elem) {
-    elem.style.background = '';
-    elem.style.cssText += 'background: -moz-linear-gradient(top,  #ff0000 0%, #ff00ff 17%, #0000ff 34%, #00ffff 50%, #00ff00 67%, #ffff00 84%, #ff0000 100%);'
-    elem.style.cssText += 'background: -webkit-linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
-    elem.style.cssText += 'background: -o-linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
-    elem.style.cssText += 'background: -ms-linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
-    elem.style.cssText += 'background: linear-gradient(top,  #ff0000 0%,#ff00ff 17%,#0000ff 34%,#00ffff 50%,#00ff00 67%,#ffff00 84%,#ff0000 100%);'
-  }
-
-
-  return ColorController;
-
-})(dat.controllers.Controller,
-dat.dom.dom,
-dat.color.Color = (function (interpret, math, toString, common) {
-
-  var Color = function() {
-
-    this.__state = interpret.apply(this, arguments);
-
-    if (this.__state === false) {
-      throw 'Failed to interpret color arguments';
-    }
-
-    this.__state.a = this.__state.a || 1;
-
-
-  };
-
-  Color.COMPONENTS = ['r','g','b','h','s','v','hex','a'];
-
-  common.extend(Color.prototype, {
-
-    toString: function() {
-      return toString(this);
-    },
-
-    toOriginal: function() {
-      return this.__state.conversion.write(this);
-    }
-
-  });
-
-  defineRGBComponent(Color.prototype, 'r', 2);
-  defineRGBComponent(Color.prototype, 'g', 1);
-  defineRGBComponent(Color.prototype, 'b', 0);
-
-  defineHSVComponent(Color.prototype, 'h');
-  defineHSVComponent(Color.prototype, 's');
-  defineHSVComponent(Color.prototype, 'v');
-
-  Object.defineProperty(Color.prototype, 'a', {
-
-    get: function() {
-      return this.__state.a;
-    },
-
-    set: function(v) {
-      this.__state.a = v;
-    }
-
-  });
-
-  Object.defineProperty(Color.prototype, 'hex', {
-
-    get: function() {
-
-      if (!this.__state.space !== 'HEX') {
-        this.__state.hex = math.rgb_to_hex(this.r, this.g, this.b);
-      }
-
-      return this.__state.hex;
-
-    },
-
-    set: function(v) {
-
-      this.__state.space = 'HEX';
-      this.__state.hex = v;
-
-    }
-
-  });
-
-  function defineRGBComponent(target, component, componentHexIndex) {
-
-    Object.defineProperty(target, component, {
-
-      get: function() {
-
-        if (this.__state.space === 'RGB') {
-          return this.__state[component];
-        }
-
-        recalculateRGB(this, component, componentHexIndex);
-
-        return this.__state[component];
-
-      },
-
-      set: function(v) {
-
-        if (this.__state.space !== 'RGB') {
-          recalculateRGB(this, component, componentHexIndex);
-          this.__state.space = 'RGB';
-        }
-
-        this.__state[component] = v;
-
-      }
-
-    });
-
-  }
-
-  function defineHSVComponent(target, component) {
-
-    Object.defineProperty(target, component, {
-
-      get: function() {
-
-        if (this.__state.space === 'HSV')
-          return this.__state[component];
-
-        recalculateHSV(this);
-
-        return this.__state[component];
-
-      },
-
-      set: function(v) {
-
-        if (this.__state.space !== 'HSV') {
-          recalculateHSV(this);
-          this.__state.space = 'HSV';
-        }
-
-        this.__state[component] = v;
-
-      }
-
-    });
-
-  }
-
-  function recalculateRGB(color, component, componentHexIndex) {
-
-    if (color.__state.space === 'HEX') {
-
-      color.__state[component] = math.component_from_hex(color.__state.hex, componentHexIndex);
-
-    } else if (color.__state.space === 'HSV') {
-
-      common.extend(color.__state, math.hsv_to_rgb(color.__state.h, color.__state.s, color.__state.v));
-
-    } else {
-
-      throw 'Corrupted color state';
-
-    }
-
-  }
-
-  function recalculateHSV(color) {
-
-    var result = math.rgb_to_hsv(color.r, color.g, color.b);
-
-    common.extend(color.__state,
-        {
-          s: result.s,
-          v: result.v
-        }
-    );
-
-    if (!common.isNaN(result.h)) {
-      color.__state.h = result.h;
-    } else if (common.isUndefined(color.__state.h)) {
-      color.__state.h = 0;
-    }
-
-  }
-
-  return Color;
-
-})(dat.color.interpret,
-dat.color.math = (function () {
-
-  var tmpComponent;
-
-  return {
-
-    hsv_to_rgb: function(h, s, v) {
-
-      var hi = Math.floor(h / 60) % 6;
-
-      var f = h / 60 - Math.floor(h / 60);
-      var p = v * (1.0 - s);
-      var q = v * (1.0 - (f * s));
-      var t = v * (1.0 - ((1.0 - f) * s));
-      var c = [
-        [v, t, p],
-        [q, v, p],
-        [p, v, t],
-        [p, q, v],
-        [t, p, v],
-        [v, p, q]
-      ][hi];
-
-      return {
-        r: c[0] * 255,
-        g: c[1] * 255,
-        b: c[2] * 255
-      };
-
-    },
-
-    rgb_to_hsv: function(r, g, b) {
-
-      var min = Math.min(r, g, b),
-          max = Math.max(r, g, b),
-          delta = max - min,
-          h, s;
-
-      if (max != 0) {
-        s = delta / max;
-      } else {
-        return {
-          h: NaN,
-          s: 0,
-          v: 0
-        };
-      }
-
-      if (r == max) {
-        h = (g - b) / delta;
-      } else if (g == max) {
-        h = 2 + (b - r) / delta;
-      } else {
-        h = 4 + (r - g) / delta;
-      }
-      h /= 6;
-      if (h < 0) {
-        h += 1;
-      }
-
-      return {
-        h: h * 360,
-        s: s,
-        v: max / 255
-      };
-    },
-
-    rgb_to_hex: function(r, g, b) {
-      var hex = this.hex_with_component(0, 2, r);
-      hex = this.hex_with_component(hex, 1, g);
-      hex = this.hex_with_component(hex, 0, b);
-      return hex;
-    },
-
-    component_from_hex: function(hex, componentIndex) {
-      return (hex >> (componentIndex * 8)) & 0xFF;
-    },
-
-    hex_with_component: function(hex, componentIndex, value) {
-      return value << (tmpComponent = componentIndex * 8) | (hex & ~ (0xFF << tmpComponent));
-    }
-
-  }
-
-})(),
-dat.color.toString,
-dat.utils.common),
-dat.color.interpret,
-dat.utils.common),
-dat.utils.requestAnimationFrame = (function () {
-
-  /**
-   * requirejs version of Paul Irish's RequestAnimationFrame
-   * http://paulirish.com/2011/requestanimationframe-for-smart-animating/
-   */
-
-  return window.webkitRequestAnimationFrame ||
-      window.mozRequestAnimationFrame ||
-      window.oRequestAnimationFrame ||
-      window.msRequestAnimationFrame ||
-      function(callback, element) {
-
-        window.setTimeout(callback, 1000 / 60);
-
-      };
-})(),
-dat.dom.CenteredDiv = (function (dom, common) {
-
-
-  var CenteredDiv = function() {
-
-    this.backgroundElement = document.createElement('div');
-    common.extend(this.backgroundElement.style, {
-      backgroundColor: 'rgba(0,0,0,0.8)',
-      top: 0,
-      left: 0,
-      display: 'none',
-      zIndex: '1000',
-      opacity: 0,
-      WebkitTransition: 'opacity 0.2s linear'
-    });
-
-    dom.makeFullscreen(this.backgroundElement);
-    this.backgroundElement.style.position = 'fixed';
-
-    this.domElement = document.createElement('div');
-    common.extend(this.domElement.style, {
-      position: 'fixed',
-      display: 'none',
-      zIndex: '1001',
-      opacity: 0,
-      WebkitTransition: '-webkit-transform 0.2s ease-out, opacity 0.2s linear'
-    });
-
-
-    document.body.appendChild(this.backgroundElement);
-    document.body.appendChild(this.domElement);
-
-    var _this = this;
-    dom.bind(this.backgroundElement, 'click', function() {
-      _this.hide();
-    });
-
-
-  };
-
-  CenteredDiv.prototype.show = function() {
-
-    var _this = this;
-    
-
-
-    this.backgroundElement.style.display = 'block';
-
-    this.domElement.style.display = 'block';
-    this.domElement.style.opacity = 0;
-//    this.domElement.style.top = '52%';
-    this.domElement.style.webkitTransform = 'scale(1.1)';
-
-    this.layout();
-
-    common.defer(function() {
-      _this.backgroundElement.style.opacity = 1;
-      _this.domElement.style.opacity = 1;
-      _this.domElement.style.webkitTransform = 'scale(1)';
-    });
-
-  };
-
-  CenteredDiv.prototype.hide = function() {
-
-    var _this = this;
-
-    var hide = function() {
-
-      _this.domElement.style.display = 'none';
-      _this.backgroundElement.style.display = 'none';
-
-      dom.unbind(_this.domElement, 'webkitTransitionEnd', hide);
-      dom.unbind(_this.domElement, 'transitionend', hide);
-      dom.unbind(_this.domElement, 'oTransitionEnd', hide);
-
-    };
-
-    dom.bind(this.domElement, 'webkitTransitionEnd', hide);
-    dom.bind(this.domElement, 'transitionend', hide);
-    dom.bind(this.domElement, 'oTransitionEnd', hide);
-
-    this.backgroundElement.style.opacity = 0;
-//    this.domElement.style.top = '48%';
-    this.domElement.style.opacity = 0;
-    this.domElement.style.webkitTransform = 'scale(1.1)';
-
-  };
-
-  CenteredDiv.prototype.layout = function() {
-    this.domElement.style.left = window.innerWidth/2 - dom.getWidth(this.domElement) / 2 + 'px';
-    this.domElement.style.top = window.innerHeight/2 - dom.getHeight(this.domElement) / 2 + 'px';
-  };
-  
-  function lockScroll(e) {
-    console.log(e);
-  }
-
-  return CenteredDiv;
-
-})(dat.dom.dom,
-dat.utils.common),
-dat.dom.dom,
-dat.utils.common);
-return root.dat = dat;
-  }).apply(root, arguments);
 });
-}(this));
 
-define('VoxView',['require','three'],function(require){
-  var THREE     = require( 'three' )
+define('VoxView',['require','three','dat/gui/GUI'],function(require){
+  var THREE = require( 'three' )
+    , GUI   = require( 'dat/gui/GUI' )
     ;
 
   //
@@ -42708,7 +43497,7 @@ define('VoxView',['require','three'],function(require){
   }
 
   VoxView.initGui = function(model, grid) {
-    var gui = new dat.GUI();
+    var gui = new GUI();
 
     for (var i = 0; i < 8; i++) {
       var folder = gui.addFolder(VoxView.CORNER[i].name);
@@ -43725,14 +44514,15 @@ define('VoxView/App',['require','Detector','three','three.orbitcontrols','../Vox
 
 require.config({
     paths: {
-        'dat': 'libs/dat-gui/build/dat.gui'
+        'dat': 'libs/dat-gui/src/dat'
       , 'three': 'libs/threejs/build/three'
       , 'three.orbitcontrols': 'OrbitControls'
+      , 'text': 'libs/requirejs-text/text'
+      , 'domReady': 'libs/requirejs-domReady/domReady'
     }
 
   , shim: {
-        'dat': { exports: 'dat' }
-      , 'Detector': { exports: 'Detector' }
+        'Detector': { exports: 'Detector' }
       , 'three': { exports: 'THREE' }
       , 'three.orbitcontrols': {
             deps: [ 'three' ]
@@ -43741,26 +44531,28 @@ require.config({
     }
 });
 
-define('main',['require','three','dat','VoxView','VoxView/App'],function(require){
-    var three       = require( 'three' )
-      , dat         = require( 'dat' )
-      , VoxView     = require( 'VoxView' )
+define('main',['require','VoxView','VoxView/App'],function(require){
+    var VoxView     = require( 'VoxView' )
       , VoxViewApp  = require( 'VoxView/App' )
-
-      , initialState  = window.location.search.substring(1)
-      , displayDiv    = document.getElementById('voxViewDisplay')
-      , corners
       ;
-    if (initialState) {
-      corners = VoxView.readQueryString(initialState);
-    }
-    voxObject = new VoxViewApp({ cornerLocs: corners,
-                                 container: displayDiv,
-                                 width: 800,
-                                 height: 600 });
 
-    // Start animation loop
-    voxObject.animate();
+    require(['domReady!'], function (doc){
+        var initialState  = window.location.search.substring(1)
+          , displayDiv    = document.getElementById('voxViewDisplay')
+          , corners
+          ;
+        if (initialState) {
+          corners = VoxView.readQueryString(initialState);
+        }
+
+        voxObject = new VoxViewApp({ cornerLocs: corners,
+                                     container: displayDiv,
+                                     width: 800,
+                                     height: 600 });
+
+        // Start animation loop
+        voxObject.animate();
+    });
 });
 
 
