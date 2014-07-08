@@ -7,8 +7,7 @@ Landmark-style voxel geometry. It is built upon several libraries:
 * [dat.GUI](https://code.google.com/p/dat-gui/) for UI widgets
 * Detector.js and Orbit Controls.js from [Three.js Examples](https://github.com/stemkoski/stemkoski.github.com) (WebGL detection and 3D manipulation controls)
 
-Compatible versions of the above libraries are included in the `js`
-subdirectory and retain their original authorship and licenses.
+To install the dependencies via bower user 'bower install'.
 
 ## Current Status
 
